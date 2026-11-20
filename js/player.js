@@ -15,6 +15,9 @@
     this.direcao = null;   // direção atual do movimento (null = parado)
     this.ultimaDirecao = 'baixo'; // para onde está olhando
     this.proximaDirecao = null;   // pedida pelo teclado/toque
+    // Quando há rastro, a meia-volta fica travada mesmo parado na borda,
+    // para o explorador não pisar sem querer no próprio rastro.
+    this.travarMeiaVolta = false;
   }
 
   /* Guarda a direção pedida; ela é aplicada ao chegar na próxima célula. */
@@ -50,7 +53,8 @@
    */
   Explorador.prototype.escolherProximoPasso = function (grade) {
     var pedida = this.proximaDirecao;
-    if (pedida && this.direcao && IT.OPOSTA[pedida] === this.direcao) {
+    var referencia = this.direcao || (this.travarMeiaVolta ? this.ultimaDirecao : null);
+    if (pedida && referencia && IT.OPOSTA[pedida] === referencia) {
       pedida = null; // meia-volta não é permitida
     }
     if (pedida) {

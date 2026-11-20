@@ -42,5 +42,72 @@
     }
   };
 
+  /* Apaga todo o rastro (vira grama de novo). Usado na penalidade. */
+  Grade.prototype.limparRastro = function () {
+    for (var i = 0; i < this.celulas.length; i++) {
+      if (this.celulas[i] === RASTRO) this.celulas[i] = VAZIO;
+    }
+  };
+
+  Grade.prototype.temRastro = function () {
+    for (var i = 0; i < this.celulas.length; i++) {
+      if (this.celulas[i] === RASTRO) return true;
+    }
+    return false;
+  };
+
+  /*
+   * Captura de área, chamada quando o explorador volta ao território.
+   * 1) Todo rastro vira território.
+   * 2) Flood fill (busca em largura) a partir das bordas do mapa, andando
+   *    só por células que NÃO são território.
+   * 3) Toda célula não-território que o flood fill não alcançou está
+   *    cercada pelo território: ela também vira território.
+   * Devolve quantas células novas foram conquistadas.
+   */
+  Grade.prototype.capturar = function () {
+    var w = this.colunas, h = this.linhas, c = this.celulas;
+    var ganhas = 0, i;
+
+    for (i = 0; i < c.length; i++) {
+      if (c[i] === RASTRO) { c[i] = TERRITORIO; ganhas++; }
+    }
+
+    var alcancada = new Uint8Array(c.length);
+    var fila = new Int32Array(c.length);
+    var ini = 0, fim = 0;
+
+    function semear(x, y) {
+      var k = y * w + x;
+      if (!alcancada[k] && c[k] !== TERRITORIO) { alcancada[k] = 1; fila[fim++] = k; }
+    }
+
+    for (var x = 0; x < w; x++) { semear(x, 0); semear(x, h - 1); }
+    for (var y = 0; y < h; y++) { semear(0, y); semear(w - 1, y); }
+
+    while (ini < fim) {
+      var k = fila[ini++];
+      var kx = k % w, ky = (k - kx) / w;
+      if (kx > 0) semear(kx - 1, ky);
+      if (kx < w - 1) semear(kx + 1, ky);
+      if (ky > 0) semear(kx, ky - 1);
+      if (ky < h - 1) semear(kx, ky + 1);
+    }
+
+    for (i = 0; i < c.length; i++) {
+      if (!alcancada[i] && c[i] !== TERRITORIO) { c[i] = TERRITORIO; ganhas++; }
+    }
+    return ganhas;
+  };
+
+  /* Fração do mapa (0 a 1) que já é território. */
+  Grade.prototype.fracaoConquistada = function () {
+    var n = 0;
+    for (var i = 0; i < this.celulas.length; i++) {
+      if (this.celulas[i] === TERRITORIO) n++;
+    }
+    return n / this.celulas.length;
+  };
+
   IT.Grade = Grade;
 })(window.IlhasDeTinta);

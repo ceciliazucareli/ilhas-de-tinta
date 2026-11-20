@@ -19,7 +19,21 @@ body {
 
 .titulo { margin: 4px 0 0; font-size: 2rem; color: #fff; text-shadow: 0 3px 0 #ff7eb6; }
 
-.moldura { width: 100%; max-width: 876px; }
+.moldura { position: relative; width: 100%; max-width: 876px; }
+
+/* Balão de mensagem que aparece por cima do mapa. */
+.mensagem {
+  position: absolute; left: 50%; top: 14%;
+  transform: translate(-50%, -10px) scale(0.9);
+  padding: 10px 22px; border-radius: 999px;
+  background: #fff; font-weight: 800; font-size: 1.2rem;
+  box-shadow: 0 6px 18px rgba(60, 80, 140, 0.2);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.mensagem.visivel { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.mensagem.aviso { color: #e2589a; }
+.mensagem.sucesso { color: #4a9d2f; }
 canvas { display: block; width: 100%; height: auto; }
 
 .controles {

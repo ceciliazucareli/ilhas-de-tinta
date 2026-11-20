@@ -9,6 +9,7 @@
   var jogo = {
     grade: null,
     explorador: null,
+    ultimoSeguro: null, // última célula de território visitada
     ultimoTempo: 0
   };
 
@@ -17,6 +18,39 @@
     var cx = Math.floor(C.COLUNAS / 2), cy = Math.floor(C.LINHAS / 2);
     jogo.grade.pintarQuadrado(cx, cy, C.TERRITORIO_INICIAL);
     jogo.explorador = new IT.Explorador(cx, cy);
+    jogo.ultimoSeguro = { x: cx, y: cy };
+  }
+
+  /*
+   * Regras aplicadas sempre que o explorador chega numa célula.
+   * Devolve false quando o movimento deve ser interrompido.
+   */
+  function aoChegar(x, y) {
+    var G = IT.Grade, grade = jogo.grade, v = grade.get(x, y);
+
+    if (v === G.RASTRO) {
+      // Pisou no próprio rastro: penalidade suave, sem "morte".
+      grade.limparRastro();
+      jogo.explorador.teleportar(jogo.ultimoSeguro.x, jogo.ultimoSeguro.y);
+      jogo.explorador.travarMeiaVolta = false;
+      IT.ui.mostrarMensagem('Ops! Tente de novo 🙂', 'aviso');
+      return false;
+    }
+
+    if (v === G.VAZIO) {
+      grade.set(x, y, G.RASTRO); // fora de casa: deixa tinta
+      jogo.explorador.travarMeiaVolta = true;
+      return true;
+    }
+
+    // Chegou no território.
+    if (jogo.explorador.travarMeiaVolta) {
+      var ganhas = grade.capturar();
+      if (ganhas > 0) IT.ui.mostrarMensagem('+' + ganhas + ' pedacinhos de ilha!', 'sucesso');
+    }
+    jogo.explorador.travarMeiaVolta = false;
+    jogo.ultimoSeguro = { x: x, y: y };
+    return true;
   }
 
   function quadro(agoraMs) {
@@ -24,13 +58,14 @@
     var dt = Math.min(0.05, agora - (jogo.ultimoTempo || agora)); // limita saltos
     jogo.ultimoTempo = agora;
 
-    jogo.explorador.atualizar(dt, jogo.grade, null);
+    jogo.explorador.atualizar(dt, jogo.grade, aoChegar);
     IT.renderer.desenhar(jogo.grade, jogo.explorador, agora);
     requestAnimationFrame(quadro);
   }
 
   window.addEventListener('load', function () {
     novoJogo();
+    IT.ui.iniciar();
     IT.renderer.iniciar(document.getElementById('tela'), jogo.grade);
     IT.input.iniciar(function (dir) { jogo.explorador.pedirDirecao(dir); });
     requestAnimationFrame(quadro);
