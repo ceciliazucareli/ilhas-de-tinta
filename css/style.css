@@ -170,7 +170,12 @@ canvas { display: block; width: 100%; height: auto; }
 .meta-multi { margin: 6px 0 0; font-size: 0.9rem; font-weight: 700; color: #4a9d2f; }
 
 /* ---------- Tela de configuração ---------- */
-.cartao-largo { max-width: 640px; width: 100%; max-height: 100%; overflow-y: auto; }
+/* A configuração ocupa a tela toda (com rolagem), para caber 4 jogadores. */
+#tela-configuracao {
+  position: fixed; z-index: 10; overflow-y: auto; border-radius: 0;
+  background: rgba(124, 207, 255, 0.6);
+}
+.cartao-largo { max-width: 860px; width: 100%; margin: auto; }
 .setup { margin-top: 12px; text-align: left; }
 .setup-titulo { margin: 4px 0 8px; font-weight: 800; text-align: center; }
 .setup-quantidade { display: flex; justify-content: center; gap: 10px; }
@@ -185,7 +190,10 @@ canvas { display: block; width: 100%; height: auto; }
   border-color: #e2589a; background: #ffe3f0; color: #c23d7e;
 }
 .opcao:focus-visible { outline: 3px solid #4a9d2f; outline-offset: 2px; }
-.setup-vagas { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.setup-vagas {
+  list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
 .vaga {
   display: grid; gap: 8px; padding: 10px 12px;
   border-radius: 18px; border: 3px solid var(--cor); background: #fffafd;

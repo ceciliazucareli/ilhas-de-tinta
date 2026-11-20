@@ -32,7 +32,8 @@
         var tecla = mapa[e.code];
         if (tecla) {
           if (aoDirecionar(tecla.esquema, tecla.direcao)) e.preventDefault();
-        } else if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'NumpadEnter') && aoConfirmar) {
+        } else if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'NumpadEnter') && aoConfirmar &&
+                   alvo !== 'BUTTON') { // num botão focado, Enter/Espaço já clicam nele
           if (aoConfirmar()) e.preventDefault();
         }
       });
