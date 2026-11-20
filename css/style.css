@@ -54,3 +54,55 @@ canvas { display: block; width: 100%; height: auto; }
 .seta.esquerda { grid-column: 1; grid-row: 2; }
 .seta.baixo { grid-column: 2; grid-row: 2; }
 .seta.direita { grid-column: 3; grid-row: 2; }
+
+/* HUD: porcentagem e barra de progresso com marca da meta. */
+.hud {
+  width: 100%; max-width: 876px;
+  padding: 10px 18px 14px; border-radius: 22px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 6px 18px rgba(60, 80, 140, 0.12);
+}
+.hud-linha { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.hud-rotulo { font-weight: 700; }
+.hud-porcentagem { font-size: 1.6rem; color: #e2589a; min-width: 3ch; }
+.hud-meta { margin-left: auto; font-weight: 700; color: #4a9d2f; }
+.barra {
+  position: relative; height: 14px; margin-top: 6px;
+  border-radius: 999px; background: #e3f4d3; overflow: visible;
+}
+.barra-preenchida {
+  height: 100%; width: 0; border-radius: 999px;
+  background: linear-gradient(90deg, #ffb3d4, #ff7eb6);
+  transition: width 0.4s ease-out;
+}
+.marca-meta {
+  position: absolute; top: -4px; bottom: -4px; width: 4px;
+  margin-left: -2px; border-radius: 2px; background: #4a9d2f;
+}
+
+/* Telas de início e vitória por cima do mapa. */
+.sobreposicao {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px; border-radius: 24px;
+  background: rgba(124, 207, 255, 0.45);
+}
+.sobreposicao[hidden] { display: none; }
+.cartao {
+  max-width: 440px; padding: 24px 28px; text-align: center;
+  border-radius: 28px; background: #fff;
+  box-shadow: 0 10px 30px rgba(60, 80, 140, 0.25);
+}
+.cartao h2 { margin: 0 0 10px; color: #e2589a; }
+.cartao p { margin: 8px 0; line-height: 1.4; }
+.cartao .dica { font-size: 0.95rem; color: #6a6f93; }
+.botao {
+  margin-top: 14px; padding: 12px 30px;
+  border: none; border-radius: 999px;
+  font: inherit; font-weight: 800; font-size: 1.2rem;
+  color: #fff; background: #ff7eb6; box-shadow: 0 5px 0 #e2589a;
+  cursor: pointer;
+}
+.botao:hover { background: #ff8fc0; }
+.botao:active { transform: translateY(3px); box-shadow: 0 2px 0 #e2589a; }
+.botao:focus-visible { outline: 3px solid #4a9d2f; outline-offset: 3px; }

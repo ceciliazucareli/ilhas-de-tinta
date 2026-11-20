@@ -9,9 +9,43 @@
 <body>
   <main class="palco">
     <h1 class="titulo">Ilhas de Tinta</h1>
+
+    <!-- HUD: porcentagem conquistada e meta -->
+    <section class="hud" aria-label="Progresso">
+      <div class="hud-linha">
+        <span class="hud-rotulo">Conquistado</span>
+        <strong id="porcentagem" class="hud-porcentagem">0%</strong>
+        <span id="texto-meta" class="hud-meta">Conquiste 80% do mapa!</span>
+      </div>
+      <div class="barra" role="presentation">
+        <div id="barra-preenchida" class="barra-preenchida"></div>
+        <div id="marca-meta" class="marca-meta" title="Meta"></div>
+      </div>
+    </section>
     <div class="moldura">
       <canvas id="tela" aria-label="Mapa da ilha"></canvas>
       <div id="mensagem" class="mensagem" role="status" aria-live="polite"></div>
+
+      <!-- Tela inicial -->
+      <div id="tela-inicio" class="sobreposicao">
+        <div class="cartao">
+          <h2>Bem-vindo à ilha!</h2>
+          <p>Saia do seu território pintado, dê uma voltinha pela grama e
+            volte para casa: tudo o que ficar dentro do caminho vira seu!</p>
+          <p class="dica">Cuidado para não pisar no próprio rastro de tinta.</p>
+          <p class="dica">Use as <b>setas</b> ou <b>W A S D</b> (ou os botões na tela).</p>
+          <button id="botao-comecar" class="botao">Começar</button>
+        </div>
+      </div>
+
+      <!-- Tela de vitória -->
+      <div id="tela-vitoria" class="sobreposicao" hidden>
+        <div class="cartao">
+          <h2>Uhuu! Você pintou a ilha! 🎉</h2>
+          <p>Que explorador incrível! A ilha está cheia de cor.</p>
+          <button id="botao-jogar-de-novo" class="botao">Jogar de novo</button>
+        </div>
+      </div>
     </div>
     <div class="controles" aria-label="Controles de toque">
       <button class="seta cima" data-direcao="cima" aria-label="Cima">▲</button>

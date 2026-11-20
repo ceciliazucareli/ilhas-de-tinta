@@ -1,12 +1,14 @@
 /*
  * game.js — liga tudo: cria grade e explorador, roda o loop com
  * requestAnimationFrame e aplica as regras quando o explorador chega numa célula.
+ * Estados: 'inicio' → 'jogando' → 'vitoria' (e "Jogar de novo" volta a 'jogando').
  */
 (function (IT) {
   'use strict';
 
   var C = IT.config;
   var jogo = {
+    estado: 'inicio',
     grade: null,
     explorador: null,
     ultimoSeguro: null, // última célula de território visitada
@@ -46,6 +48,12 @@
     // Chegou no território.
     if (jogo.explorador.travarMeiaVolta) {
       var ganhas = grade.capturar();
+      var fracao = grade.fracaoConquistada();
+      IT.ui.atualizarHUD(fracao);
+      if (fracao >= C.META) {
+        vencer();
+        return false;
+      }
       if (ganhas > 0) IT.ui.mostrarMensagem('+' + ganhas + ' pedacinhos de ilha!', 'sucesso');
     }
     jogo.explorador.travarMeiaVolta = false;
@@ -53,21 +61,50 @@
     return true;
   }
 
+  function vencer() {
+    jogo.estado = 'vitoria';
+    jogo.explorador.teleportar(jogo.explorador.x, jogo.explorador.y);
+    IT.ui.esconderMensagem();
+    IT.ui.mostrarEstado('vitoria');
+  }
+
+  /* Começa (ou recomeça) uma partida. */
+  function jogar() {
+    novoJogo();
+    jogo.estado = 'jogando';
+    IT.ui.atualizarHUD(jogo.grade.fracaoConquistada());
+    IT.ui.mostrarEstado('jogando');
+  }
+
   function quadro(agoraMs) {
     var agora = agoraMs / 1000;
     var dt = Math.min(0.05, agora - (jogo.ultimoTempo || agora)); // limita saltos
     jogo.ultimoTempo = agora;
 
-    jogo.explorador.atualizar(dt, jogo.grade, aoChegar);
+    if (jogo.estado === 'jogando') {
+      jogo.explorador.atualizar(dt, jogo.grade, aoChegar);
+    }
     IT.renderer.desenhar(jogo.grade, jogo.explorador, agora);
     requestAnimationFrame(quadro);
   }
 
   window.addEventListener('load', function () {
     novoJogo();
-    IT.ui.iniciar();
+    IT.ui.iniciar(jogar);
+    IT.ui.atualizarHUD(jogo.grade.fracaoConquistada());
+    IT.ui.mostrarEstado('inicio');
     IT.renderer.iniciar(document.getElementById('tela'), jogo.grade);
-    IT.input.iniciar(function (dir) { jogo.explorador.pedirDirecao(dir); });
+    IT.input.iniciar(
+      function (dir) {
+        if (jogo.estado === 'jogando') jogo.explorador.pedirDirecao(dir);
+      },
+      function () {
+        // Enter/Espaço também começam o jogo nas telas de início e vitória.
+        if (jogo.estado === 'jogando') return false;
+        jogar();
+        return true;
+      }
+    );
     requestAnimationFrame(quadro);
   });
 
