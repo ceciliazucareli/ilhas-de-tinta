@@ -21,6 +21,7 @@
     jogo.grade.pintarQuadrado(cx, cy, C.TERRITORIO_INICIAL);
     jogo.explorador = new IT.Explorador(cx, cy);
     jogo.ultimoSeguro = { x: cx, y: cy };
+    IT.renderer.novaPartida(jogo.grade);
   }
 
   /*
@@ -66,6 +67,7 @@
     jogo.explorador.teleportar(jogo.explorador.x, jogo.explorador.y);
     IT.ui.esconderMensagem();
     IT.ui.mostrarEstado('vitoria');
+    IT.renderer.soltarConfete();
   }
 
   /* Começa (ou recomeça) uma partida. */
@@ -89,11 +91,11 @@
   }
 
   window.addEventListener('load', function () {
+    IT.renderer.iniciar(document.getElementById('tela'), new IT.Grade(C.COLUNAS, C.LINHAS));
     novoJogo();
     IT.ui.iniciar(jogar);
     IT.ui.atualizarHUD(jogo.grade.fracaoConquistada());
     IT.ui.mostrarEstado('inicio');
-    IT.renderer.iniciar(document.getElementById('tela'), jogo.grade);
     IT.input.iniciar(
       function (dir) {
         if (jogo.estado === 'jogando') jogo.explorador.pedirDirecao(dir);

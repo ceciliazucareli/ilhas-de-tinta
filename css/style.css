@@ -4,9 +4,36 @@
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "Nunito", "Varela Round", "Trebuchet MS", system-ui, sans-serif;
+  /* Fontes arredondadas do sistema, quando existirem (sem baixar nada). */
+  font-family: ui-rounded, "Nunito", "Varela Round", "Arial Rounded MT Bold",
+    "Comic Neue", "Trebuchet MS", system-ui, sans-serif;
   color: #3a3f63;
   background: linear-gradient(#7ccfff, #c7ecff 70%, #e9f8ff);
+  overflow-x: hidden;
+}
+
+/* Céu com nuvens fofinhas feitas só com CSS. */
+.ceu { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.nuvem {
+  position: absolute; width: 140px; height: 44px;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.9);
+  animation: passear linear infinite;
+}
+.nuvem::before, .nuvem::after {
+  content: ""; position: absolute; border-radius: 50%; background: inherit;
+}
+.nuvem::before { width: 64px; height: 64px; left: 22px; top: -30px; }
+.nuvem::after { width: 48px; height: 48px; left: 70px; top: -20px; }
+.n1 { top: 8%; animation-duration: 70s; animation-delay: -10s; }
+.n2 { top: 38%; transform: scale(0.7); animation-duration: 95s; animation-delay: -60s; opacity: 0.8; }
+.n3 { top: 72%; transform: scale(1.2); animation-duration: 120s; animation-delay: -30s; opacity: 0.7; }
+@keyframes passear {
+  from { left: -220px; }
+  to { left: 110%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nuvem { animation: none; left: 10%; }
+  .n2 { left: 70%; }
 }
 
 .palco {
@@ -17,7 +44,10 @@ body {
   padding: 16px;
 }
 
-.titulo { margin: 4px 0 0; font-size: 2rem; color: #fff; text-shadow: 0 3px 0 #ff7eb6; }
+.titulo {
+  margin: 4px 0 0; font-size: 2.3rem; letter-spacing: 0.02em;
+  color: #fff; text-shadow: 0 3px 0 #ff7eb6, 0 6px 14px rgba(226, 88, 154, 0.35);
+}
 
 .moldura { position: relative; width: 100%; max-width: 876px; }
 
@@ -85,7 +115,7 @@ canvas { display: block; width: 100%; height: auto; }
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
   padding: 16px; border-radius: 24px;
-  background: rgba(124, 207, 255, 0.45);
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 70%);
 }
 .sobreposicao[hidden] { display: none; }
 .cartao {
@@ -93,7 +123,12 @@ canvas { display: block; width: 100%; height: auto; }
   border-radius: 28px; background: #fff;
   box-shadow: 0 10px 30px rgba(60, 80, 140, 0.25);
 }
+.cartao { animation: surgir 0.35s ease-out; }
 .cartao h2 { margin: 0 0 10px; color: #e2589a; }
+@keyframes surgir {
+  from { opacity: 0; transform: translateY(12px) scale(0.95); }
+  to { opacity: 1; transform: none; }
+}
 .cartao p { margin: 8px 0; line-height: 1.4; }
 .cartao .dica { font-size: 0.95rem; color: #6a6f93; }
 .botao {
@@ -106,3 +141,13 @@ canvas { display: block; width: 100%; height: auto; }
 .botao:hover { background: #ff8fc0; }
 .botao:active { transform: translateY(3px); box-shadow: 0 2px 0 #e2589a; }
 .botao:focus-visible { outline: 3px solid #4a9d2f; outline-offset: 3px; }
+
+/* Telas pequenas (celular): textos e botões um pouco menores. */
+@media (max-width: 560px) {
+  .titulo { font-size: 1.7rem; }
+  .hud-meta { margin-left: 0; width: 100%; }
+  .cartao { padding: 16px 18px; }
+  /* O mapa fica pequeno: as telas de início/vitória cobrem a página toda. */
+  .sobreposicao { position: fixed; z-index: 10; border-radius: 0; background: rgba(124, 207, 255, 0.55); }
+  .cartao p { font-size: 0.92rem; }
+}
