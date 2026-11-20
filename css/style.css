@@ -1,0 +1,42 @@
+/* style.css — página, moldura do canvas e controles de toque. */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Nunito", "Varela Round", "Trebuchet MS", system-ui, sans-serif;
+  color: #3a3f63;
+  background: linear-gradient(#7ccfff, #c7ecff 70%, #e9f8ff);
+}
+
+.palco {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+.titulo { margin: 4px 0 0; font-size: 2rem; color: #fff; text-shadow: 0 3px 0 #ff7eb6; }
+
+.moldura { width: 100%; max-width: 876px; }
+canvas { display: block; width: 100%; height: auto; }
+
+.controles {
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(2, 56px);
+  gap: 6px;
+  touch-action: none;
+}
+.seta {
+  border: none; border-radius: 16px;
+  background: #fff; color: #ff7eb6; font-size: 1.4rem;
+  box-shadow: 0 4px 0 #ffb3d4; cursor: pointer;
+  touch-action: none; user-select: none;
+}
+.seta:active { transform: translateY(3px); box-shadow: 0 1px 0 #ffb3d4; }
+.seta.cima { grid-column: 2; grid-row: 1; }
+.seta.esquerda { grid-column: 1; grid-row: 2; }
+.seta.baixo { grid-column: 2; grid-row: 2; }
+.seta.direita { grid-column: 3; grid-row: 2; }

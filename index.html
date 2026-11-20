@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ilhas de Tinta</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="palco">
+    <h1 class="titulo">Ilhas de Tinta</h1>
+    <div class="moldura">
+      <canvas id="tela" aria-label="Mapa da ilha"></canvas>
+    </div>
+    <div class="controles" aria-label="Controles de toque">
+      <button class="seta cima" data-direcao="cima" aria-label="Cima">▲</button>
+      <button class="seta esquerda" data-direcao="esquerda" aria-label="Esquerda">◀</button>
+      <button class="seta direita" data-direcao="direita" aria-label="Direita">▶</button>
+      <button class="seta baixo" data-direcao="baixo" aria-label="Baixo">▼</button>
+    </div>
+  </main>
+
+  <!-- Scripts clássicos (sem módulos) para abrir com duplo clique. A ordem importa. -->
+  <script src="js/config.js"></script>
+  <script src="js/grid.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
