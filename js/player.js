@@ -1,5 +1,5 @@
 /*
- * player.js — o explorador.
+ * player.js — o explorador (um por jogador).
  * Ele anda de célula em célula. Entre duas células a posição é interpolada
  * (campo "progresso" de 0 a 1) para o movimento ficar suave na tela.
  */
@@ -14,10 +14,14 @@
     this.progresso = 0;    // 0 = em (x,y); 1 = chegou em (alvoX, alvoY)
     this.direcao = null;   // direção atual do movimento (null = parado)
     this.ultimaDirecao = 'baixo'; // para onde está olhando
-    this.proximaDirecao = null;   // pedida pelo teclado/toque
+    this.proximaDirecao = null;   // pedida pelo teclado/toque/CPU
+    this.velocidade = 1;   // multiplicador da velocidade base (CPU fácil é mais lenta)
     // Quando há rastro, a meia-volta fica travada mesmo parado na borda,
     // para o explorador não pisar sem querer no próprio rastro.
     this.travarMeiaVolta = false;
+    // Para a CPU: objeto com decidir(), chamado sempre que o explorador
+    // chega numa célula (ou está parado) para escolher a próxima direção.
+    this.controlador = null;
   }
 
   /* Guarda a direção pedida; ela é aplicada ao chegar na próxima célula. */
@@ -27,6 +31,12 @@
 
   Explorador.prototype.andando = function () {
     return this.direcao !== null;
+  };
+
+  /* Direção que não pode ser escolhida agora (meia-volta), ou null. */
+  Explorador.prototype.direcaoProibida = function () {
+    var referencia = this.direcao || (this.travarMeiaVolta ? this.ultimaDirecao : null);
+    return referencia ? IT.OPOSTA[referencia] : null;
   };
 
   /* Posição "visual" em células (com fração), usada pelo renderer. */
@@ -44,19 +54,17 @@
     this.progresso = 0;
     this.direcao = null;
     this.proximaDirecao = null;
+    this.travarMeiaVolta = false;
   };
 
   /*
    * Escolhe a próxima célula a partir da posição atual.
-   * Regras: não pode dar meia-volta (180°) enquanto anda; a borda do mapa
-   * bloqueia e faz o explorador parar.
+   * Regras: não pode dar meia-volta (180°); a borda do mapa bloqueia e faz o
+   * explorador parar.
    */
   Explorador.prototype.escolherProximoPasso = function (grade) {
     var pedida = this.proximaDirecao;
-    var referencia = this.direcao || (this.travarMeiaVolta ? this.ultimaDirecao : null);
-    if (pedida && referencia && IT.OPOSTA[pedida] === referencia) {
-      pedida = null; // meia-volta não é permitida
-    }
+    if (pedida && pedida === this.direcaoProibida()) pedida = null;
     if (pedida) {
       this.direcao = pedida;
       this.ultimaDirecao = pedida;
@@ -81,16 +89,18 @@
   Explorador.prototype.atualizar = function (dt, grade, aoChegar) {
     if (!this.direcao) {
       // Parado: começa a andar assim que houver uma direção pedida.
+      if (this.controlador) this.controlador.decidir();
       if (this.proximaDirecao) this.escolherProximoPasso(grade);
       if (!this.direcao) return;
     }
-    this.progresso += dt * IT.config.VELOCIDADE;
+    this.progresso += dt * IT.config.VELOCIDADE * this.velocidade;
     while (this.progresso >= 1 && this.direcao) {
       this.progresso -= 1;
       this.x = this.alvoX;
       this.y = this.alvoY;
       var continuar = aoChegar ? aoChegar(this.x, this.y) : true;
       if (continuar === false) { this.progresso = 0; return; }
+      if (this.controlador) this.controlador.decidir();
       this.escolherProximoPasso(grade);
       if (!this.direcao) this.progresso = 0;
     }

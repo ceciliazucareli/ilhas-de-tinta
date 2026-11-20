@@ -17,8 +17,8 @@
   <main class="palco">
     <h1 class="titulo">Ilhas de Tinta</h1>
 
-    <!-- HUD: porcentagem conquistada e meta -->
-    <section class="hud" aria-label="Progresso">
+    <!-- HUD do modo solo: porcentagem conquistada e meta -->
+    <section id="hud-solo" class="hud" aria-label="Progresso">
       <div class="hud-linha">
         <span class="hud-rotulo">Conquistado</span>
         <strong id="porcentagem" class="hud-porcentagem">0%</strong>
@@ -29,32 +29,53 @@
         <div id="marca-meta" class="marca-meta" title="Meta"></div>
       </div>
     </section>
+
+    <!-- HUD do modo com vários jogadores: placar colorido e relógio -->
+    <section id="hud-multi" class="hud hud-multi" aria-label="Placar" hidden>
+      <div class="hud-linha">
+        <ol id="placar" class="placar"></ol>
+        <strong id="relogio" class="relogio" aria-live="off">⏱ 2:00</strong>
+      </div>
+      <p id="meta-multi" class="meta-multi"></p>
+    </section>
+
     <div class="moldura">
       <canvas id="tela" aria-label="Mapa da ilha"></canvas>
       <div id="mensagem" class="mensagem" role="status" aria-live="polite"></div>
 
-      <!-- Tela inicial -->
-      <div id="tela-inicio" class="sobreposicao">
-        <div class="cartao">
+      <!-- Tela de configuração (antes de jogar) -->
+      <div id="tela-configuracao" class="sobreposicao">
+        <div class="cartao cartao-largo">
           <h2>Bem-vindo à ilha!</h2>
           <p>Saia do seu território pintado, dê uma voltinha pela grama e
             volte para casa: tudo o que ficar dentro do caminho vira seu!</p>
           <p class="dica">Cuidado para não pisar no próprio rastro de tinta.</p>
-          <p class="dica">Use as <b>setas</b> ou <b>W A S D</b> (ou os botões na tela).</p>
-          <button id="botao-comecar" class="botao">Começar</button>
+
+          <div id="setup" class="setup">
+            <p class="setup-titulo">Quantos jogadores?</p>
+            <div id="setup-quantidade" class="setup-quantidade" role="radiogroup" aria-label="Número de jogadores"></div>
+            <ul id="setup-vagas" class="setup-vagas"></ul>
+          </div>
+
+          <button id="botao-jogar" class="botao botao-grande">Jogar</button>
         </div>
       </div>
 
-      <!-- Tela de vitória -->
-      <div id="tela-vitoria" class="sobreposicao" hidden>
+      <!-- Tela de fim: comemoração (solo) ou ranking (vários jogadores) -->
+      <div id="tela-fim" class="sobreposicao" hidden>
         <div class="cartao">
-          <h2>Uhuu! Você pintou a ilha! 🎉</h2>
-          <p>Que explorador incrível! A ilha está cheia de cor.</p>
-          <button id="botao-jogar-de-novo" class="botao">Jogar de novo</button>
+          <h2 id="fim-titulo">Uhuu! Você pintou a ilha! 🎉</h2>
+          <p id="fim-texto">Que explorador incrível! A ilha está cheia de cor.</p>
+          <ol id="fim-ranking" class="ranking" hidden></ol>
+          <div class="botoes-fim">
+            <button id="botao-jogar-de-novo" class="botao">Jogar de novo</button>
+            <button id="botao-mudar-jogadores" class="botao botao-secundario">Mudar jogadores</button>
+          </div>
         </div>
       </div>
     </div>
-    <div class="controles" aria-label="Controles de toque">
+
+    <div id="controles-toque" class="controles" aria-label="Controles de toque">
       <button class="seta cima" data-direcao="cima" aria-label="Cima">▲</button>
       <button class="seta esquerda" data-direcao="esquerda" aria-label="Esquerda">◀</button>
       <button class="seta direita" data-direcao="direita" aria-label="Direita">▶</button>

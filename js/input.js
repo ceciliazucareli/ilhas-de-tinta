@@ -1,26 +1,38 @@
 /*
  * input.js — controles.
- * Teclado: setas ou WASD. Toque/mouse: botões direcionais na tela.
- * Cada direção pedida é repassada para a função "aoDirecionar".
+ * Teclado: cada vaga de jogador tem um esquema (veja IT.CONTROLES em config.js).
+ * Toque/mouse: botões direcionais na tela (esquema 'toque').
+ * Cada direção pedida é repassada para aoDirecionar(esquema, direcao), onde
+ * esquema é o índice da vaga (0 a 3) ou 'toque'. Quem decide qual jogador
+ * recebe a direção é o game.js.
  */
 (function (IT) {
   'use strict';
 
-  var TECLAS = {
-    ArrowUp: 'cima', KeyW: 'cima',
-    ArrowDown: 'baixo', KeyS: 'baixo',
-    ArrowLeft: 'esquerda', KeyA: 'esquerda',
-    ArrowRight: 'direita', KeyD: 'direita'
-  };
+  /* Monta um mapa código-da-tecla → { esquema, direcao }. */
+  function mapaDeTeclas() {
+    var mapa = {};
+    IT.CONTROLES.forEach(function (controle, esquema) {
+      Object.keys(controle.teclas).forEach(function (codigo) {
+        mapa[codigo] = { esquema: esquema, direcao: controle.teclas[codigo] };
+      });
+    });
+    return mapa;
+  }
 
   IT.input = {
     iniciar: function (aoDirecionar, aoConfirmar) {
+      var mapa = mapaDeTeclas();
+
       window.addEventListener('keydown', function (e) {
-        var dir = TECLAS[e.code];
-        if (dir) {
-          e.preventDefault();
-          aoDirecionar(dir);
-        } else if ((e.code === 'Enter' || e.code === 'Space') && aoConfirmar) {
+        // Não atrapalha quem está digitando um nome na tela de configuração.
+        var alvo = e.target && e.target.tagName;
+        if (alvo === 'INPUT' || alvo === 'SELECT' || alvo === 'TEXTAREA') return;
+
+        var tecla = mapa[e.code];
+        if (tecla) {
+          if (aoDirecionar(tecla.esquema, tecla.direcao)) e.preventDefault();
+        } else if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'NumpadEnter') && aoConfirmar) {
           if (aoConfirmar()) e.preventDefault();
         }
       });
@@ -30,7 +42,7 @@
       Array.prototype.forEach.call(botoes, function (botao) {
         botao.addEventListener('pointerdown', function (e) {
           e.preventDefault();
-          aoDirecionar(botao.getAttribute('data-direcao'));
+          aoDirecionar('toque', botao.getAttribute('data-direcao'));
         });
       });
     }

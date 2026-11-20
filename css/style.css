@@ -142,6 +142,98 @@ canvas { display: block; width: 100%; height: auto; }
 .botao:active { transform: translateY(3px); box-shadow: 0 2px 0 #e2589a; }
 .botao:focus-visible { outline: 3px solid #4a9d2f; outline-offset: 3px; }
 
+/* ---------- HUD com vários jogadores ---------- */
+.hud[hidden] { display: none; }
+.placar {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin: 0; padding: 0; list-style: none; flex: 1;
+}
+.chip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 12px 4px 6px; border-radius: 999px;
+  background: #fff; border: 3px solid var(--cor);
+  font-weight: 700; transition: transform 0.2s;
+}
+.chip.lider { transform: scale(1.08); box-shadow: 0 3px 0 var(--cor-escura); }
+.chip-bolinha {
+  display: inline-block; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--cor); border: 2px solid var(--cor-escura); flex: none;
+}
+.chip-pct { color: var(--cor-escura); font-size: 1.15rem; }
+.relogio {
+  margin-left: auto; padding: 4px 14px; border-radius: 999px;
+  background: #fff; font-size: 1.3rem; color: #3a3f63;
+  font-variant-numeric: tabular-nums;
+}
+.relogio.acabando { color: #e2589a; animation: piscar 1s ease-in-out infinite; }
+@keyframes piscar { 50% { transform: scale(1.1); } }
+.meta-multi { margin: 6px 0 0; font-size: 0.9rem; font-weight: 700; color: #4a9d2f; }
+
+/* ---------- Tela de configuração ---------- */
+.cartao-largo { max-width: 640px; width: 100%; max-height: 100%; overflow-y: auto; }
+.setup { margin-top: 12px; text-align: left; }
+.setup-titulo { margin: 4px 0 8px; font-weight: 800; text-align: center; }
+.setup-quantidade { display: flex; justify-content: center; gap: 10px; }
+.opcao {
+  min-width: 52px; min-height: 48px; padding: 6px 14px;
+  border: 3px solid #d7dcf5; border-radius: 16px;
+  background: #fff; color: #3a3f63; font: inherit; font-weight: 800; font-size: 1.15rem;
+  cursor: pointer;
+}
+.opcao:hover { border-color: #ffb3d4; }
+.opcao[aria-checked="true"], .opcao[aria-pressed="true"] {
+  border-color: #e2589a; background: #ffe3f0; color: #c23d7e;
+}
+.opcao:focus-visible { outline: 3px solid #4a9d2f; outline-offset: 2px; }
+.setup-vagas { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.vaga {
+  display: grid; gap: 8px; padding: 10px 12px;
+  border-radius: 18px; border: 3px solid var(--cor); background: #fffafd;
+}
+.vaga-topo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.vaga-numero {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--cor); color: #fff; font-weight: 800;
+  border: 3px solid var(--cor-escura);
+}
+.vaga-nome {
+  flex: 1; min-width: 120px; padding: 8px 10px;
+  border: 2px solid #d7dcf5; border-radius: 12px;
+  font: inherit; font-weight: 700; font-size: 1.05rem; color: #3a3f63;
+}
+.vaga-linha { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.vaga-rotulo { font-size: 0.9rem; font-weight: 700; color: #6a6f93; min-width: 60px; }
+.vaga .opcao { min-width: 44px; min-height: 40px; font-size: 1rem; padding: 4px 12px; }
+.cor-opcao {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 3px solid #fff; box-shadow: 0 0 0 2px #d7dcf5; cursor: pointer;
+}
+.cor-opcao[aria-pressed="true"] { box-shadow: 0 0 0 4px #3a3f63; }
+.cor-opcao:focus-visible { outline: 3px solid #4a9d2f; outline-offset: 4px; }
+.vaga-controles {
+  font-size: 0.95rem; font-weight: 700; color: #3a3f63;
+  background: #eef3ff; padding: 4px 10px; border-radius: 10px;
+}
+.botao-grande { font-size: 1.4rem; padding: 14px 44px; }
+
+/* ---------- Tela de fim com ranking ---------- */
+.ranking { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; text-align: left; }
+.ranking li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; border-radius: 16px;
+  border: 3px solid var(--cor); background: #fff;
+  font-weight: 700; font-size: 1.1rem;
+}
+.ranking li:first-child { background: #fffbe6; transform: scale(1.03); }
+.ranking .medalha { font-size: 1.4rem; }
+.ranking .ranking-nome { flex: 1; }
+.ranking strong { color: var(--cor-escura); font-size: 1.25rem; }
+.botoes-fim { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.botao-secundario { background: #fff; color: #e2589a; box-shadow: 0 5px 0 #ffb3d4; border: 3px solid #ffb3d4; }
+.botao-secundario:hover { background: #fff3f8; }
+.controles[hidden] { display: none; }
+
 /* Telas pequenas (celular): textos e botões um pouco menores. */
 @media (max-width: 560px) {
   .titulo { font-size: 1.7rem; }
