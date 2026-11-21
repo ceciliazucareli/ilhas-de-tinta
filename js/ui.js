@@ -129,10 +129,10 @@
           el.fimTitulo.textContent = 'Parabéns, ' + vencedor.jogador.nome + '! 🎉';
         }
         el.fimTexto.textContent = porTempo
-          ? 'O tempo acabou! Veja quem pintou mais:'
-          : vencedor.jogador.nome + ' chegou na meta! Veja quem pintou mais:';
+          ? 'O tempo acabou!'
+          : vencedor.jogador.nome + ' chegou na meta!';
         if (vencedor.jogador.tipo === 'cpu' && humanos > 0 && !empate) {
-          el.fimTexto.textContent += ' (Tente de novo, você consegue!)';
+          el.fimTexto.textContent += ' Tente de novo, você consegue! 💪';
         }
         var medalhas = ['🥇', '🥈', '🥉', '🏅'];
         ranking.forEach(function (r, i) {

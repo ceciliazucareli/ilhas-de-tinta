@@ -55,6 +55,39 @@
       IT.config.TEMPO_LIMITE = TEMPO;
       var i = 0;
 
+      // ---- Controles: cada esquema de teclado move o jogador certo ----
+      function tecla(code) {
+        w.dispatchEvent(new w.KeyboardEvent('keydown', { code: code, bubbles: true }));
+      }
+      function testarControles() {
+        var humano = function (cor, nome) { return { tipo: 'humano', cor: cor, nome: nome }; };
+        IT.jogo.jogar({ vagas: [humano('rosa', 'J1'), humano('azul', 'J2'), humano('amarelo', 'J3'), humano('roxo', 'J4')] });
+        var js = IT.jogo.jogadores;
+        var casos = [
+          ['KeyW', 0, 'cima'], ['ArrowLeft', 1, 'esquerda'], ['KeyK', 2, 'baixo'],
+          ['Numpad6', 3, 'direita'], ['KeyT', 3, 'cima']
+        ];
+        casos.forEach(function (c) {
+          js.forEach(function (j) { j.explorador.proximaDirecao = null; });
+          tecla(c[0]);
+          var ok = js.every(function (j, k) { return j.explorador.proximaDirecao === (k === c[1] ? c[2] : null); });
+          if (!ok) falhas++;
+          log((ok ? 'ok   - ' : 'FALHA - ') + 'tecla ' + c[0] + ' move só o J' + (c[1] + 1));
+        });
+        // Um único humano (na vaga 2) aceita WASD e setas; CPUs não obedecem ao teclado.
+        IT.jogo.jogar({ vagas: [cpu('rosa', 'medio', 'C1'), humano('azul', 'Solo')] });
+        js = IT.jogo.jogadores;
+        js[1].explorador.proximaDirecao = null;
+        tecla('KeyA');
+        var ok1 = js[1].explorador.proximaDirecao === 'esquerda';
+        js[1].explorador.proximaDirecao = null;
+        tecla('ArrowUp');
+        var ok2 = js[1].explorador.proximaDirecao === 'cima';
+        if (!(ok1 && ok2)) falhas++;
+        log((ok1 && ok2 ? 'ok   - ' : 'FALHA - ') + 'um único humano aceita WASD e setas');
+      }
+      testarControles();
+
       function proximo() {
         if (i >= CENARIOS.length) return terminar();
         var c = CENARIOS[i++];

@@ -96,7 +96,7 @@
         dono = grade.donos[k];
         if (dono === 0) continue;
         var cores = coresPorId[dono];
-        var idade = tempo - pintadoEm[k];
+        var idade = Math.max(0, tempo - pintadoEm[k]);
         var escala = Math.min(1, 0.4 + idade * 4);
         var lado = t * escala, folga = (t - lado) / 2;
         ctx.fillStyle = (x + y) % 2 === 0 ? cores.tinta : cores.clara;
