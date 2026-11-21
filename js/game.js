@@ -26,7 +26,7 @@
     jogadores: [],
     meta: C.META,
     tempoRestante: 0,
-    ultimoTempo: 0
+    ultimoTempo: 0     // tempo de jogo acumulado, em segundos (usado pela CPU)
   };
 
   /* ---------- Montagem da partida ---------- */
@@ -64,7 +64,9 @@
         inicio: inicio,
         ultimoSeguro: { x: inicio.x, y: inicio.y },
         explorador: new IT.Explorador(inicio.x, inicio.y),
-        ia: null
+        ia: null,
+        // Contadores usados nos testes (ex.: a CPU nunca deve pisar no próprio rastro).
+        estatisticas: { proprioRastro: 0, rastroCortado: 0, cortes: 0, capturas: 0 }
       };
       jogo.grade.pintarQuadrado(inicio.x, inicio.y, C.TERRITORIO_INICIAL, j.id);
       j.aoChegar = function (x, y) { return aoChegar(j, x, y); };
@@ -97,6 +99,7 @@
 
     if (rastro === j.id) {
       // Pisou no próprio rastro: penalidade suave, sem "morte".
+      j.estatisticas.proprioRastro++;
       penalizar(j, jogo.modo === 'solo' ? 'Ops! Tente de novo 🙂' : 'Ops, ' + j.nome + '! Tente de novo 🙂');
       return false;
     }
@@ -106,6 +109,8 @@
       // dois exploradores na mesma célula não faz nada acontecer).
       var outro = jogadorPorId(rastro);
       if (outro.explorador.x !== x || outro.explorador.y !== y) {
+        j.estatisticas.cortes++;
+        outro.estatisticas.rastroCortado++;
         penalizar(outro, '✂️ ' + j.nome + ' cortou o rastro de ' + outro.nome + '!');
       }
     }
@@ -114,6 +119,7 @@
       // De volta para casa: se havia rastro, conquista a área.
       if (grade.temRastro(j.id)) {
         var ganhas = grade.capturar(j.id);
+        j.estatisticas.capturas++;
         darIlhaNovaParaQuemFicouSem();
         IT.ui.atualizarHUD(jogo);
         if (verificarFim()) return false;
@@ -260,26 +266,32 @@
 
   var segundoAnterior = -1;
 
+  /* Avança a lógica do jogo em "dt" segundos (sem desenhar). */
+  function passo(dt) {
+    jogo.ultimoTempo += dt;
+    if (jogo.estado !== 'jogando') return;
+    for (var i = 0; i < jogo.jogadores.length && jogo.estado === 'jogando'; i++) {
+      var j = jogo.jogadores[i];
+      j.explorador.atualizar(dt, jogo.grade, j.aoChegar);
+    }
+    if (jogo.modo === 'multi' && jogo.estado === 'jogando') {
+      jogo.tempoRestante = Math.max(0, jogo.tempoRestante - dt);
+      var segundo = Math.ceil(jogo.tempoRestante);
+      if (segundo !== segundoAnterior) {
+        segundoAnterior = segundo;
+        IT.ui.atualizarRelogio(jogo.tempoRestante);
+      }
+      verificarFim();
+    }
+  }
+
+  var relogioAnterior = 0;
+
   function quadro(agoraMs) {
     var agora = agoraMs / 1000;
-    var dt = Math.min(0.05, agora - (jogo.ultimoTempo || agora)); // limita saltos
-    jogo.ultimoTempo = agora;
-
-    if (jogo.estado === 'jogando') {
-      for (var i = 0; i < jogo.jogadores.length && jogo.estado === 'jogando'; i++) {
-        var j = jogo.jogadores[i];
-        j.explorador.atualizar(dt, jogo.grade, j.aoChegar);
-      }
-      if (jogo.modo === 'multi' && jogo.estado === 'jogando') {
-        jogo.tempoRestante = Math.max(0, jogo.tempoRestante - dt);
-        var segundo = Math.ceil(jogo.tempoRestante);
-        if (segundo !== segundoAnterior) {
-          segundoAnterior = segundo;
-          IT.ui.atualizarRelogio(jogo.tempoRestante);
-        }
-        verificarFim();
-      }
-    }
+    var dt = Math.min(0.05, agora - (relogioAnterior || agora)); // limita saltos
+    relogioAnterior = agora;
+    passo(dt);
     IT.renderer.desenhar(jogo.grade, jogo.jogadores, agora, jogo.modo);
     requestAnimationFrame(quadro);
   }
@@ -302,6 +314,7 @@
 
   // Exposto para depuração e testes no console.
   jogo.jogar = jogar;
+  jogo.passo = passo; // usado por tests/simulacao.html para acelerar partidas
   jogo.ranking = ranking;
   IT.jogo = jogo;
 })(window.IlhasDeTinta);

@@ -50,9 +50,9 @@ window.IlhasDeTinta = window.IlhasDeTinta || {};
 
   /* Níveis da CPU: velocidade relativa e parâmetros usados por ai.js. */
   IT.DIFICULDADES = {
-    facil:   { nome: 'Fácil',   velocidade: 0.7 },
-    medio:   { nome: 'Médio',   velocidade: 0.85 },
-    dificil: { nome: 'Difícil', velocidade: 0.95 }
+    facil:   { nome: 'Fácil',   velocidade: 0.6 },
+    medio:   { nome: 'Médio',   velocidade: 0.72 },
+    dificil: { nome: 'Difícil', velocidade: 0.78 }
   };
 
   /*

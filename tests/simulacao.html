@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Simulação de partidas — Ilhas de Tinta</title>
+  <style>
+    body { font-family: monospace; padding: 16px; }
+    iframe { width: 900px; height: 820px; border: 2px solid #ccc; }
+    .passou { background: #eaffea; }
+    .falhou { background: #ffeaea; }
+  </style>
+</head>
+<body>
+  <!--
+    Roda várias partidas automáticas com CPUs dentro do jogo de verdade
+    (num iframe) e confere: a partida termina, não há erros, e as CPUs Médio e
+    Difícil nunca pisam no próprio rastro.
+
+    Como usar: sirva a pasta do projeto (python3 -m http.server) e abra
+    http://localhost:8000/tests/simulacao.html
+    (Em file:// o navegador bloqueia o acesso ao iframe.)
+    As partidas avançam pelo jogo.passo(dt) em lotes (bem mais rápido que o
+    tempo real). Parâmetro opcional na URL: ?tempo=120 (segundos de jogo).
+  -->
+  <h1>Simulação de partidas com CPUs</h1>
+  <pre id="saida">rodando…</pre>
+  <iframe id="jogo" src="../index.html"></iframe>
+  <script>
+  (function () {
+    'use strict';
+    var params = new URLSearchParams(location.search);
+    var TEMPO = +(params.get('tempo') || 120);        // segundos de partida (tempo de jogo)
+    var DT = 1 / 60;                                   // um quadro a 60 fps
+    var saida = [], erros = [], falhas = 0;
+    function log(t) { saida.push(t); document.getElementById('saida').textContent = saida.join('\n'); }
+
+    function cpu(cor, dificuldade, nome) {
+      return { tipo: 'cpu', cor: cor, dificuldade: dificuldade, nome: nome };
+    }
+
+    var CENARIOS = [
+      { nome: '1 humano parado + CPU Fácil', vagas: [{ tipo: 'humano', cor: 'rosa', nome: 'Humano' }, cpu('azul', 'facil', 'CPU Fácil')] },
+      { nome: '1 humano parado + CPU Médio', vagas: [{ tipo: 'humano', cor: 'rosa', nome: 'Humano' }, cpu('azul', 'medio', 'CPU Médio')] },
+      { nome: '1 humano parado + CPU Difícil', vagas: [{ tipo: 'humano', cor: 'rosa', nome: 'Humano' }, cpu('azul', 'dificil', 'CPU Difícil')] },
+      { nome: '3 CPUs (Fácil, Médio, Difícil)', vagas: [cpu('rosa', 'facil', 'Fácil'), cpu('azul', 'medio', 'Médio'), cpu('amarelo', 'dificil', 'Difícil')] },
+      { nome: '4 CPUs (Fácil, Médio, Difícil, Difícil)', vagas: [cpu('rosa', 'facil', 'Fácil'), cpu('azul', 'medio', 'Médio'), cpu('amarelo', 'dificil', 'Difícil A'), cpu('roxo', 'dificil', 'Difícil B')] },
+      { nome: '4 CPUs Médio', vagas: [cpu('rosa', 'medio', 'M1'), cpu('azul', 'medio', 'M2'), cpu('amarelo', 'medio', 'M3'), cpu('roxo', 'medio', 'M4')] }
+    ];
+
+    var frame = document.getElementById('jogo');
+    frame.addEventListener('load', function () {
+      var w = frame.contentWindow;
+      w.addEventListener('error', function (e) { erros.push(e.message); });
+      var IT = w.IlhasDeTinta;
+      IT.config.TEMPO_LIMITE = TEMPO;
+      var i = 0;
+
+      function proximo() {
+        if (i >= CENARIOS.length) return terminar();
+        var c = CENARIOS[i++];
+        IT.jogo.jogar({ vagas: c.vagas });
+        var quadros = 0, limite = (TEMPO + 5) / DT;
+        // Avança 600 quadros (10 s de jogo) por vez até a partida acabar.
+        var t = setInterval(function () {
+          for (var k = 0; k < 600 && IT.jogo.estado === 'jogando'; k++, quadros++) IT.jogo.passo(DT);
+          var acabou = IT.jogo.estado === 'fim';
+          if (!acabou && quadros < limite) return;
+          clearInterval(t);
+          var linhas = IT.jogo.ranking().map(function (r) {
+            var j = r.jogador, e = j.estatisticas;
+            var problema = j.tipo === 'cpu' && j.dificuldade !== 'facil' && e.proprioRastro > 0;
+            if (problema) falhas++;
+            return '    ' + (problema ? '!! ' : '') + j.nome + ' (' + j.tipo + (j.tipo === 'cpu' ? ' ' + j.dificuldade : '') + '): ' +
+              Math.floor(r.fracao * 100) + '%  capturas=' + e.capturas + ' cortes=' + e.cortes +
+              ' rastroCortado=' + e.rastroCortado + ' pisouNoProprio=' + e.proprioRastro;
+          });
+          if (!acabou) { falhas++; log('FALHA - ' + c.nome + ': a partida não terminou'); }
+          else log('ok   - ' + c.nome + ' — ' + Math.round(quadros * DT) + ' s de jogo — ' + w.document.getElementById('fim-titulo').textContent);
+          linhas.forEach(log);
+          setTimeout(proximo, 50);
+        }, 0);
+      }
+
+      function terminar() {
+        if (erros.length) { falhas++; log('ERROS NO CONSOLE:\n' + erros.join('\n')); }
+        log(falhas ? falhas + ' falha(s)' : 'Todas as simulações passaram.');
+        window.resultadoSimulacao = { falhas: falhas, texto: saida.join('\n') };
+        document.body.className = falhas ? 'falhou' : 'passou';
+        document.title = 'FIM ' + (falhas ? 'FALHOU' : 'OK');
+      }
+
+      proximo();
+    });
+  })();
+  </script>
+</body>
+</html>
