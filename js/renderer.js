@@ -2,6 +2,13 @@
  * renderer.js — desenha tudo no canvas: ilha flutuante, grama com flores e
  * árvores, território pintado de cada jogador, rastros de tinta, os
  * exploradores e o confete do fim. Nenhuma imagem externa: só formas simples.
+ *
+ * Câmera: o canvas ocupa toda a área de jogo da tela.
+ *   - Se o mapa inteiro cabe com células de bom tamanho (desktop), mostra tudo.
+ *   - Em tela pequena (celular), a câmera SEGUE o explorador deste aparelho com
+ *     células grandes (28–40 px) e aparece um minimapa no canto.
+ * Só as células visíveis são desenhadas, e o canvas usa devicePixelRatio
+ * (no máximo 2) para ficar nítido sem pesar no celular.
  */
 (function (IT) {
   'use strict';
@@ -16,6 +23,15 @@
   var confetes = [];
   var cel = C.CELULA;        // tamanho da célula desta partida (muda com o mapa)
   var coresPorId = [];       // paleta de cada jogador, indexada pelo id
+
+  /* Câmera. Coordenadas do "mundo" = as mesmas de px(); escala = px de tela por unidade. */
+  var cam = { x: 0, y: 0, escala: 1, seguindo: false, pronta: false };
+  var tela = { w: 0, h: 0, dpr: 1 };              // tamanho do canvas em px CSS
+  var vista = { x0: 0, y0: 0, x1: 0, y1: 0 };      // células visíveis (inclusive)
+  var mundo = { w: 0, h: 0 };
+  var minimapa = { canvas: null, atualizadoEm: -1 };
+  var CELULA_MINIMA_TELA = 22;    // toque: abaixo disso (mapa inteiro), a câmera passa a seguir
+  var CELULA_MINIMA_DESKTOP = 15; // mouse/teclado: só segue em janelas bem pequenas
 
   /* Converte coordenada de célula para pixel (canto superior esquerdo). */
   function px(celula) { return C.MARGEM + celula * cel; }
@@ -77,21 +93,24 @@
     var t = cel;
     var x, y, k, dono;
 
+    var X0 = vista.x0, X1 = vista.x1, Y0 = vista.y0, Y1 = vista.y1; // só o que aparece
+
     // 1) Grama em todo lugar que não é território de ninguém.
-    for (y = 0; y < grade.linhas; y++) {
-      for (x = 0; x < grade.colunas; x++) {
+    for (y = Y0; y <= Y1; y++) {
+      for (x = X0; x <= X1; x++) {
         if (grade.dono(x, y) === 0) desenharGrama(x, y);
       }
     }
 
     // 2) Decoração só na grama livre e sem rastro.
     decoracoes.forEach(function (d) {
+      if (d.x < X0 || d.x > X1 || d.y < Y0 || d.y > Y1) return;
       if (grade.dono(d.x, d.y) === 0 && grade.rastro(d.x, d.y) === 0) desenharDecoracao(d, tempo);
     });
 
     // 3) Território: cada célula "cresce" rapidinho ao ser pintada.
-    for (y = 0; y < grade.linhas; y++) {
-      for (x = 0; x < grade.colunas; x++) {
+    for (y = Y0; y <= Y1; y++) {
+      for (x = X0; x <= X1; x++) {
         k = y * grade.colunas + x;
         dono = grade.donos[k];
         if (dono === 0) continue;
@@ -117,8 +136,8 @@
       var mesmo = function (a, b) { return grade.dentro(a, b) && grade.dono(a, b) === id; };
       ctx.strokeStyle = coresPorId[id].escura;
       ctx.beginPath();
-      for (y = 0; y < grade.linhas; y++) {
-        for (x = 0; x < grade.colunas; x++) {
+      for (y = Y0; y <= Y1; y++) {
+        for (x = X0; x <= X1; x++) {
           if (grade.dono(x, y) !== id) continue;
           if (!mesmo(x, y - 1)) { ctx.moveTo(px(x), px(y)); ctx.lineTo(px(x + 1), px(y)); }
           if (!mesmo(x, y + 1)) { ctx.moveTo(px(x), px(y + 1)); ctx.lineTo(px(x + 1), px(y + 1)); }
@@ -130,8 +149,8 @@
     }
 
     // 5) Rastros: gotas de tinta que pulsam de leve, na cor de cada jogador.
-    for (y = 0; y < grade.linhas; y++) {
-      for (x = 0; x < grade.colunas; x++) {
+    for (y = Y0; y <= Y1; y++) {
+      for (x = X0; x <= X1; x++) {
         var dono_rastro = grade.rastro(x, y);
         if (dono_rastro === 0) continue;
         var cr = coresPorId[dono_rastro];
@@ -278,7 +297,7 @@
   function desenharEtiqueta(texto, cx, base, cor) {
     ctx.font = 'bold 11px ui-rounded, "Nunito", "Trebuchet MS", sans-serif';
     var w = ctx.measureText(texto).width + 10;
-    var x = Math.max(2, Math.min(canvas.width - w - 2, cx - w / 2));
+    var x = Math.max(2, Math.min(mundo.w - w - 2, cx - w / 2));
     retanguloArredondado(x, base - 15, w, 15, 7);
     ctx.fillStyle = cor;
     ctx.fill();
@@ -297,8 +316,8 @@
     confetes = [];
     for (var i = 0; i < 140; i++) {
       confetes.push({
-        x: Math.random() * canvas.width,
-        y: -Math.random() * canvas.height,
+        x: Math.random() * tela.w,
+        y: -Math.random() * tela.h,
         vy: 60 + Math.random() * 90,
         giro: Math.random() * Math.PI * 2,
         cor: cores[i % cores.length]
@@ -310,7 +329,7 @@
     confetes.forEach(function (c) {
       c.y += c.vy * dt;
       c.giro += dt * 5;
-      if (c.y > canvas.height) c.y = -10; // cai em loop enquanto a tela de vitória está aberta
+      if (c.y > tela.h) c.y = -10; // cai em loop enquanto a tela de vitória está aberta
       ctx.save();
       ctx.translate(c.x + Math.sin(c.giro) * 6, c.y);
       ctx.rotate(c.giro);
@@ -318,6 +337,137 @@
       ctx.fillRect(-4, -2.5, 8, 5);
       ctx.restore();
     });
+  }
+
+  /* ---------- API pública ---------- */
+
+  /* ---------- Câmera ---------- */
+
+  /* Ajusta o canvas ao tamanho dele na tela (com devicePixelRatio até 2). */
+  function ajustarTamanho() {
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    var w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
+    if (w !== tela.w || h !== tela.h || dpr !== tela.dpr) {
+      tela.w = w; tela.h = h; tela.dpr = dpr;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+    }
+  }
+
+  /* O explorador que a câmera segue: o único humano que joga neste aparelho. */
+  function quemSeguir(jogadores) {
+    var locais = jogadores.filter(function (j) { return j.tipo === 'humano' && j.local; });
+    return locais.length === 1 ? locais[0] : null;
+  }
+
+  function atualizarCamera(grade, jogadores, dt) {
+    var ajuste = Math.min(tela.w / mundo.w, tela.h / mundo.h);
+    var foco = quemSeguir(jogadores);
+    // Em aparelho de toque a câmera segue antes (dedo precisa de células maiores).
+    var toque = document.body.classList.contains('toque');
+    var seguir = !!foco && ajuste * cel < (toque ? CELULA_MINIMA_TELA : CELULA_MINIMA_DESKTOP);
+
+    var alvoX, alvoY, escala;
+    if (seguir) {
+      var celTela = Math.max(28, Math.min(40, Math.min(tela.w, tela.h) / 11));
+      escala = celTela / cel;
+      var pos = foco.explorador.posicaoVisual();
+      alvoX = px(pos.x) + cel / 2;
+      alvoY = px(pos.y) + cel / 2;
+      // Não deixa a câmera mostrar céu demais além da ilha.
+      var meiaW = tela.w / (2 * escala), meiaH = tela.h / (2 * escala), folga = cel * 1.5;
+      alvoX = mundo.w + 2 * folga <= 2 * meiaW ? mundo.w / 2 : Math.max(meiaW - folga, Math.min(mundo.w - meiaW + folga, alvoX));
+      alvoY = mundo.h + 2 * folga <= 2 * meiaH ? mundo.h / 2 : Math.max(meiaH - folga, Math.min(mundo.h - meiaH + folga, alvoY));
+    } else {
+      escala = ajuste;
+      alvoX = mundo.w / 2;
+      alvoY = mundo.h / 2;
+    }
+
+    if (!cam.pronta || seguir !== cam.seguindo) {
+      cam.x = alvoX; cam.y = alvoY; cam.pronta = true;
+    } else {
+      // Movimento suave (amortecido), independente da taxa de quadros.
+      var k = 1 - Math.exp(-dt * 9);
+      cam.x += (alvoX - cam.x) * k;
+      cam.y += (alvoY - cam.y) * k;
+    }
+    cam.escala = escala;
+    cam.seguindo = seguir;
+
+    // Células visíveis (com uma de folga).
+    var meiaLarg = tela.w / (2 * escala), meiaAlt = tela.h / (2 * escala);
+    vista.x0 = Math.max(0, Math.floor((cam.x - meiaLarg - C.MARGEM) / cel) - 1);
+    vista.x1 = Math.min(grade.colunas - 1, Math.ceil((cam.x + meiaLarg - C.MARGEM) / cel) + 1);
+    vista.y0 = Math.max(0, Math.floor((cam.y - meiaAlt - C.MARGEM) / cel) - 1);
+    vista.y1 = Math.min(grade.linhas - 1, Math.ceil((cam.y + meiaAlt - C.MARGEM) / cel) + 1);
+  }
+
+  /* ---------- Minimapa (só quando a câmera não mostra o mapa todo) ---------- */
+
+  function desenharMinimapa(grade, jogadores, tempo) {
+    var largura = Math.round(Math.min(130, tela.w * 0.3));
+    var lado = largura / grade.colunas;
+    var altura = Math.round(lado * grade.linhas);
+    var margemInferior = (IT.ui && IT.ui.margemMinimapa) ? IT.ui.margemMinimapa() : 10;
+    var x0 = 10, y0 = tela.h - altura - margemInferior;
+
+    // A imagem das células é refeita no máximo 5 vezes por segundo.
+    if (!minimapa.canvas) minimapa.canvas = document.createElement('canvas');
+    var mc = minimapa.canvas;
+    if (mc.width !== grade.colunas || mc.height !== grade.linhas || tempo - minimapa.atualizadoEm > 0.2 || tempo < minimapa.atualizadoEm) {
+      mc.width = grade.colunas; mc.height = grade.linhas;
+      var mctx = mc.getContext('2d');
+      var img = mctx.createImageData(grade.colunas, grade.linhas);
+      var grama = [184, 236, 138];
+      for (var i = 0; i < grade.total; i++) {
+        var cor = grama, d = grade.donos[i], r = grade.rastros[i];
+        if (r) cor = hexParaRgb(coresPorId[r].escura);
+        else if (d) cor = hexParaRgb(coresPorId[d].tinta);
+        img.data[i * 4] = cor[0]; img.data[i * 4 + 1] = cor[1]; img.data[i * 4 + 2] = cor[2]; img.data[i * 4 + 3] = 255;
+      }
+      mctx.putImageData(img, 0, 0);
+      minimapa.atualizadoEm = tempo;
+    }
+
+    ctx.save();
+    ctx.setTransform(tela.dpr, 0, 0, tela.dpr, 0, 0);
+    retanguloArredondado(x0 - 4, y0 - 4, largura + 8, altura + 8, 10);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fill();
+    ctx.imageSmoothingEnabled = false;
+    ctx.globalAlpha = 0.95;
+    ctx.drawImage(mc, x0, y0, largura, altura);
+    ctx.globalAlpha = 1;
+
+    // Retângulo do que a câmera está mostrando.
+    var meiaLarg = tela.w / (2 * cam.escala), meiaAlt = tela.h / (2 * cam.escala);
+    var vx = (cam.x - meiaLarg - C.MARGEM) / cel, vy = (cam.y - meiaAlt - C.MARGEM) / cel;
+    ctx.strokeStyle = 'rgba(58,63,99,0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x0 + Math.max(0, vx) * lado, y0 + Math.max(0, vy) * lado,
+      Math.min(grade.colunas, 2 * meiaLarg / cel) * lado, Math.min(grade.linhas, 2 * meiaAlt / cel) * lado);
+
+    // Exploradores (o deste aparelho com borda branca, maior).
+    var foco = quemSeguir(jogadores);
+    jogadores.forEach(function (j) {
+      var p = j.explorador.posicaoVisual();
+      ctx.beginPath();
+      ctx.arc(x0 + (p.x + 0.5) * lado, y0 + (p.y + 0.5) * lado, j === foco ? 4.5 : 3, 0, Math.PI * 2);
+      ctx.fillStyle = j.cor.escura;
+      ctx.fill();
+      if (j === foco) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); }
+    });
+    ctx.restore();
+  }
+
+  var cacheRgb = {};
+  function hexParaRgb(hex) {
+    if (!cacheRgb[hex]) {
+      var n = parseInt(hex.slice(1), 16);
+      cacheRgb[hex] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+    return cacheRgb[hex];
   }
 
   /* ---------- API pública ---------- */
@@ -330,13 +480,14 @@
       ctx = canvas.getContext('2d');
     },
 
-    /* Prepara uma nova partida: tamanho do canvas, decoração e animações. */
+    /* Prepara uma nova partida: decoração, animações e câmera. */
     novaPartida: function (grade, jogadores) {
       cel = C.TAMANHOS[jogadores.length].celula;
-      canvas.width = grade.colunas * cel + C.MARGEM * 2;
-      canvas.height = grade.linhas * cel + C.MARGEM * 2 + 70;
+      mundo.w = grade.colunas * cel + C.MARGEM * 2;
+      mundo.h = grade.linhas * cel + C.MARGEM * 2 + 70;
+      cam.pronta = false;
+      minimapa.atualizadoEm = -1;
       coresPorId = [null].concat(jogadores.map(function (j) { return j.cor; }));
-
       var rnd = aleatorio(Math.floor(Math.random() * 1e9));
       var cores = ['#ffffff', '#ffe066', '#c59bff', '#7cd1ff', '#ff9f7a'];
       decoracoes = [];
@@ -371,11 +522,26 @@
         estadoAnterior[i] = grade.donos[i];
       }
 
+      ajustarTamanho();
+      atualizarCamera(grade, jogadores, dt);
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      var e = cam.escala * tela.dpr;
+      ctx.setTransform(e, 0, 0, e, tela.dpr * (tela.w / 2 - cam.x * cam.escala), tela.dpr * (tela.h / 2 - cam.y * cam.escala));
       desenharIlha(grade);
       desenharCelulas(grade, tempo);
       jogadores.forEach(function (j) { desenharExplorador(j, tempo, modo); });
-      if (confetes.length) desenharConfete(dt);
+      if (cam.seguindo) desenharMinimapa(grade, jogadores, tempo);
+      if (confetes.length) {
+        ctx.setTransform(tela.dpr, 0, 0, tela.dpr, 0, 0);
+        desenharConfete(dt);
+      }
+    },
+
+    /* Informações da câmera (usadas nos testes). */
+    camera: function () {
+      return { seguindo: cam.seguindo, celulaNaTela: cam.escala * cel, x: cam.x, y: cam.y, tela: tela };
     }
   };
 })(window.IlhasDeTinta);
