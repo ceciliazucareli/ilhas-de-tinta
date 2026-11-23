@@ -5,29 +5,41 @@ explorador de chapéu anda por uma ilha flutuante quadriculada. Quando sai do
 território pintado, ele deixa um rastro de tinta; ao voltar para casa fechando
 uma área, tudo o que ficou dentro do caminho vira território dele.
 
-Dá para jogar **sozinho** (meta: 80% do mapa) ou com **2 a 4 jogadores** no
-mesmo computador, misturando humanos e CPUs com três níveis de dificuldade.
+Dá para jogar **Offline** — sozinho (meta: 80% do mapa) ou com **2 a 4
+jogadores** no mesmo computador, misturando humanos e CPUs com três níveis de
+dificuldade — ou **Online**, cada um no seu aparelho, numa sala com código.
+Depois da primeira visita ao site, o jogo abre e o modo Offline funciona
+**mesmo sem internet**.
 
 ![Jogando](docs/screenshots/final-jogando.png)
 ![Partida com 4 jogadores](docs/screenshots/multi-partida-4.png)
 
 ## Como executar
 
-Não precisa instalar nada: é só HTML, CSS e JavaScript puro, sem dependências
-e sem imagens externas.
+Não precisa instalar nada nem compilar: é só HTML, CSS e JavaScript puro.
+A única biblioteca (supabase-js, para o online) fica copiada em `js/vendor/`.
 
-- **Jeito mais fácil:** dê um duplo clique em `index.html`.
-- **Com um servidor local** (opcional):
+- **Jeito mais fácil:** dê um duplo clique em `index.html`. Funciona o modo
+  Offline; o Online avisa que precisa do site (http/https).
+- **Com um servidor local** (Offline + Online + funcionar sem internet):
 
   ```sh
   python3 -m http.server
   ```
 
   e abra <http://localhost:8000> no navegador.
+- **No ar:** é um site estático; dá para publicar como está (por exemplo na
+  Vercel — o `vercel.json` só ajusta o cache do `sw.js`).
+
+![Menu inicial](docs/screenshots/online-menu.png)
 
 ## Modos de jogo
 
-Ao abrir o jogo aparece a **tela de configuração**:
+A primeira tela é o **menu**: **Jogar Offline** ou **Jogar Online**.
+
+### Offline
+
+Em "Jogar Offline" aparece a **tela de configuração**:
 
 1. Escolha quantos jogadores: **1, 2, 3 ou 4**.
 2. Para cada vaga escolha **Humano** ou **CPU**, a **cor** (rosa, azul,
@@ -38,11 +50,11 @@ Ao abrir o jogo aparece a **tela de configuração**:
 
 ![Tela de configuração](docs/screenshots/multi-configuracao.png)
 
-### Solo (1 jogador)
+#### Solo (1 jogador)
 
 É o modo de sempre: mapa 30x20, começa no centro, meta de **80%**, sem relógio.
 
-### 2 a 4 jogadores
+#### 2 a 4 jogadores
 
 | Jogadores | Mapa | Onde cada um começa | Meta antecipada |
 | --- | --- | --- | --- |
@@ -60,6 +72,82 @@ Ao abrir o jogo aparece a **tela de configuração**:
 
 Os números (tamanhos, metas, tempo) ficam em `js/config.js`.
 
+### Online
+
+1. Toque em **Jogar Online** e escreva seu nome.
+2. Quem vai ser o **anfitrião** toca em **Criar sala**. Aparece um código
+   fácil de ditar, como **TINTA-4821**.
+3. Os amigos tocam em **Entrar**, digitam o código (pode ser só `4821`) e
+   pronto: todos aparecem na lista da sala, cada um com sua cor. Cada um pode
+   trocar para uma cor que esteja livre.
+4. O anfitrião pode completar as vagas vazias com **CPU** (e escolher o nível)
+   e aperta **Jogar**. São de 2 a 4 jogadores no total.
+5. Cada um joga no próprio aparelho com **W A S D**, **setas** ou os **botões
+   na tela**.
+6. No fim aparece o ranking. O anfitrião escolhe **Jogar de novo** ou **Voltar
+   para a sala**; os outros esperam ou saem.
+
+- Se o **anfitrião sair**, todos voltam ao menu com um aviso.
+- Se outro jogador **sair no meio da partida**, o explorador dele passa a ser
+  jogado pela **CPU (nível Médio)** até o fim, para a partida continuar justa.
+- Sem internet, abrindo o arquivo direto (file://) ou se o Supabase não
+  responder, aparece uma mensagem amigável e dá para voltar e jogar Offline.
+
+![Sala de espera em duas janelas](docs/screenshots/online-sala.png)
+![Partida online em duas janelas](docs/screenshots/online-partida.png)
+![Ranking online](docs/screenshots/online-ranking.png)
+
+#### Como o online funciona
+
+Não existe servidor do jogo nem banco de dados. Usamos só o **Supabase
+Realtime** (canais **Broadcast** e **Presence**) para repassar mensagens:
+
+- O navegador de quem **cria a sala** é o **anfitrião**: ele roda a partida de
+  verdade, com o mesmo código do modo offline (inclusive as CPUs).
+- Os outros aparelhos só mandam **mudanças de direção** quando o jogador aperta
+  uma tecla.
+- O anfitrião manda **10 mensagens por segundo** com as posições, o relógio e
+  só as **células que mudaram**; a cada **3 segundos** manda uma **foto
+  completa** do mapa (e também quando alguém perde mensagens).
+- Os outros aparelhos desenham o que chega e **interpolam** o movimento entre
+  uma mensagem e outra, para ficar suave.
+- **Presence** mostra quem está na sala e avisa quando alguém entra ou sai.
+
+A URL do projeto e a chave **publicável** do Supabase ficam em `js/config.js`
+(seção `ONLINE`); essa chave é pública por design. Não há login, chat nem
+pagamento.
+
+#### Limites do plano grátis do Supabase (estimativa)
+
+Confira os números atuais em <https://supabase.com/docs/guides/realtime/limits>
+— na época em que isto foi escrito, o plano grátis do Realtime permitia cerca de
+**200 conexões simultâneas**, **2 milhões de mensagens por mês** e **100
+mensagens por segundo** no projeto todo. O Supabase conta cada mensagem
+**recebida** por cada aparelho.
+
+| Partida de 2 min | Mensagens por segundo | Mensagens por partida | Partidas por mês (2 mi) |
+| --- | --- | --- | --- |
+| 2 humanos online | ~20 | ~2.700 | ~700 |
+| 4 humanos online | ~40 | ~6.000 | ~330 |
+
+(Anfitrião: 10/s × 120 s = 1.200 envios, recebidos por cada um dos outros;
+mais as teclas, que todos recebem.) Com 100 mensagens/s no projeto todo, cabem
+umas **2 salas cheias (4 jogadores) ao mesmo tempo**, ou umas 5 salas de 2.
+Para caber mais salas, diminua `ENVIOS_POR_SEGUNDO` em `js/config.js` (fica um
+pouco menos suave) ou mude de plano.
+
+## Funcionar sem internet
+
+Quando o jogo é aberto por um endereço http/https, o `sw.js` (service worker)
+guarda **todos os arquivos do jogo** no aparelho. Depois da primeira visita, o
+site abre e o modo **Offline** funciona sem internet. O `manifest.webmanifest`
+e os ícones em `icones/` permitem "instalar" o jogo na tela inicial.
+
+**Ao publicar uma versão nova, aumente `VERSAO` no `sw.js`** (ex.:
+`ilhas-de-tinta-v2`): o navegador baixa os arquivos novos e apaga o cache
+antigo. O `vercel.json` faz o `sw.js` nunca ficar em cache no servidor, para a
+atualização chegar.
+
 ## Controles
 
 | Vaga | Teclas |
@@ -69,6 +157,8 @@ Os números (tamanhos, metas, tempo) ficam em `js/config.js`.
 | J3 | **I J K L** |
 | J4 | teclado numérico **8 4 5 6** *ou* **T F G H** (para quem não tem teclado numérico) |
 
+- **Online:** cada um usa **W A S D**, **setas** ou os **botões na tela** no
+  próprio aparelho.
 - Se houver **um único humano** na partida (inclusive no solo), ele pode usar
   **W A S D**, as **setas** ou as teclas da própria vaga.
 - Os **botões na tela** (▲ ◀ ▼ ▶) controlam o único humano, ou o primeiro
@@ -122,11 +212,18 @@ js/input.js           teclado (um esquema por vaga) + botões direcionais na tel
 js/renderer.js        desenho da ilha, decoração, territórios, rastros, exploradores e confete
 js/ui.js              HUD (solo e multi), relógio, mensagens e tela de fim com ranking
 js/ai.js              a CPU (Fácil, Médio, Difícil)
-js/setup.js           tela de configuração dos jogadores
+js/setup.js           tela de configuração dos jogadores (offline)
+js/online.js          modo online: salas, Presence, anfitrião e sincronização
+js/vendor/            supabase-js 2.119.0 (cópia local, versão fixa)
+sw.js                 service worker (cache para funcionar sem internet)
+manifest.webmanifest  dados para instalar o jogo como aplicativo
+icones/               ícones do jogo (SVG e PNG)
+vercel.json           cabeçalhos de cache para a hospedagem
 js/game.js            loop (requestAnimationFrame), regras e estados:
-                      configuração → jogando → fim
+                      menu → configuração/online/sala → jogando → fim
 tests/captura.html    testes da captura de área (abra no navegador)
 tests/simulacao.html  partidas automáticas com CPUs + teste dos controles
+tests/online.html     teste online de ponta a ponta (2 ou 4 janelas, Supabase real)
 docs/screenshots/     capturas de tela
 ```
 
@@ -154,6 +251,13 @@ rastro (`Grade.capturar(N)` em `js/grid.js`):
   parado + CPU de cada nível, 3 e 4 CPUs): a partida precisa terminar, sem
   erros, e as CPUs Médio e Difícil não podem pisar no próprio rastro.
 
+- `tests/online.html` — precisa do servidor local **e de internet**
+  (<http://localhost:8000/tests/online.html>, ou `?jogadores=4`). Abre o jogo
+  em 2 ou 4 janelinhas, cada uma como um aparelho: cria a sala, entra pelo
+  código, troca de cor, completa com CPU, joga até o ranking (confere que o
+  mapa e o ranking são iguais em todas as janelas), "Jogar de novo", um
+  jogador saindo no meio (vira CPU) e o anfitrião saindo (todos voltam ao menu).
+
 A página fica verde quando tudo passa.
 
 ### Ajustes rápidos
@@ -169,6 +273,23 @@ IlhasDeTinta.config.TEMPO_LIMITE = 15;    // partida de 15 segundos
 ```
 
 ## Limitações conhecidas
+
+- **Online — o anfitrião precisa ficar com o jogo aberto e visível.** Se a aba
+  do anfitrião for para o fundo (ou a tela do celular apagar), o navegador
+  desacelera a página e a partida fica lenta para todos.
+- **Online — atraso:** a direção de quem não é anfitrião chega ao anfitrião com
+  o atraso da internet (normalmente 50–150 ms), então a virada pode acontecer
+  uma célula depois. O anfitrião não tem atraso.
+- **Online — confiança:** como o anfitrião simula tudo no navegador dele, quem
+  souber mexer no console poderia trapacear. Para um jogo entre amigos e
+  família isso é aceitável.
+- **Online — quem chega no meio** de uma partida espera na sala e entra na
+  próxima. Quem sai e volta entra como um jogador novo.
+- **Online — limites do plano grátis** (veja a tabela acima): cerca de 2 salas
+  cheias ao mesmo tempo.
+- **Sem internet:** só funciona depois de abrir o site uma vez com internet; o
+  modo Online sempre precisa de internet. Ao atualizar o jogo é preciso
+  aumentar `VERSAO` no `sw.js`.
 
 - A borda do mapa não funciona como parede na captura: uma área só é capturada
   se ficar totalmente cercada pelo território (como pede a regra do flood fill
