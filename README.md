@@ -133,6 +133,7 @@ aparelho. Liga/desliga em **⏸ → 🔊 Som** (fica salvo).
   pouquinho ⏳**" e só conta como saída depois da **tolerância: 30 s na
   partida e 60 s na sala de espera**. Na partida, enquanto isso, a CPU segura
   o explorador e devolve quando a pessoa volta ("Fulano voltou! 🎉").
+  ![Alguém saiu um pouquinho](docs/screenshots/online-saiu-um-pouquinho.png)
 - **Recarregar a página volta para a sala** (código e identidade ficam no
   `sessionStorage` da aba por até 30 min). Quem recarrega no meio da partida
   volta para dentro dela, com o mesmo explorador. Se quem recarregou era o
@@ -143,6 +144,8 @@ aparelho. Liga/desliga em **⏸ → 🔊 Som** (fica salvo).
   está acontecendo ("👀 Assistindo! Você entra na próxima partida.") — vê o
   mapa e o ranking, mas não controla ninguém — e joga a partir da próxima
   (revanche ou "Voltar para a sala").
+  ![Esperando o anfitrião](docs/screenshots/online-esperando-anfitriao.png)
+  ![Troca de anfitrião](docs/screenshots/online-troca-de-anfitriao.png)
 - **Troca de anfitrião:** se o anfitrião **sai da sala** e não volta dentro da
   tolerância (30 s na partida, 60 s na sala de espera), fica **mais de 30 s
   fora da tela** (celular bloqueado) ou **recarrega a página**, o **próximo
