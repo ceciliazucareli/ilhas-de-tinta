@@ -1,0 +1,18 @@
+{
+  "name": "Ilhas de Tinta",
+  "short_name": "Ilhas de Tinta",
+  "description": "Jogo infantil de pintar a ilha: conquiste território com seu explorador.",
+  "lang": "pt-BR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#c7ecff",
+  "theme_color": "#7ccfff",
+  "icons": [
+    { "src": "icones/icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icones/icone-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icones/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icones/icone.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
