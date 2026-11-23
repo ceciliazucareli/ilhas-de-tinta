@@ -24,7 +24,7 @@
     Roteiro: o J1 cria a sala, os outros entram com o código, alguém troca de
     cor, o anfitrião completa com CPU (com 2 jogadores) e aperta Jogar; todos
     apertam teclas ao acaso até o ranking; confere que o ranking é igual em
-    todas as janelas; "Jogar de novo"; (com 4) um cliente sai no meio da
+    todas as janelas; revanche votada por todos; (com 4) um cliente sai no meio da
     partida e vira CPU; por fim o anfitrião sai e os outros voltam ao menu.
   -->
   <h1>Teste online (Supabase de verdade)</h1>
@@ -170,11 +170,17 @@
         return parar('partida') || jogarAteOFim('1ª partida');
       }).then(function () {
         if (PARAR === 'fim') return parar('fim');
-        // 6) Jogar de novo.
-        clicar(0, 'botao-jogar-de-novo');
-        return ate(function () {
-          return janelas.every(function (f, i) { return estado(i) === 'jogando'; });
-        }, 10000, 'jogar de novo').then(function () { verificar(true, '"Jogar de novo" recomeçou em todas as janelas'); });
+        // 6) Revanche: o 1º cliente vota, todos veem o voto; quando todos votam, começa.
+        clicar(1, 'botao-jogar-de-novo');
+        return ate(function () { return /1 de/.test(doc(0).getElementById('fim-espera').textContent); }, 8000, 'voto aparecer')
+          .then(function () {
+            verificar(estado(0) === 'fim', 'com só 1 voto a revanche ainda não começa: "' + doc(0).getElementById('fim-espera').textContent + '"');
+            verificar(doc(1).getElementById('botao-jogar-de-novo').disabled, 'quem votou vê "Esperando os outros…"');
+            for (var i = 0; i < N; i++) if (i !== 1) clicar(i, 'botao-jogar-de-novo');
+            return ate(function () {
+              return janelas.every(function (f, i) { return estado(i) === 'jogando'; });
+            }, 12000, 'revanche');
+          }).then(function () { verificar(true, 'todos votaram: a revanche começou em todas as janelas'); });
       }).then(function () {
         if (N < 4) return esperar(4000);
         // 7) Com 4: Duda sai no meio da partida e vira CPU.
@@ -186,15 +192,35 @@
           }, 10000, 'quem saiu virar CPU');
         }).then(function () { verificar(true, 'Duda saiu no meio da partida e virou CPU no anfitrião'); });
       }).then(function () {
-        // 8) O anfitrião sai: os outros voltam ao menu com aviso.
-        IT(0).online.sair();
+        // 8) O anfitrião sai no meio da partida: o próximo da lista da sala assume e a partida continua.
         var restantes = [];
         for (var i = 1; i < N; i++) if (!(N === 4 && i === 3)) restantes.push(i);
+        if (!restantes.every(function (i) { return estado(i) === 'jogando'; })) return null;
+        // Quem deve assumir: o próximo da lista (a ordem é a de chegada na sala).
+        var ordem = IT(0).online.conexao().sala.membros.map(function (m) { return m.cid; }).slice(1);
+        var novo = restantes.filter(function (i) { return IT(i).online.conexao().cid === ordem[0]; })[0];
+        IT(0).online.sair();
         return ate(function () {
-          return restantes.every(function (i) { return estado(i) === 'menu'; });
-        }, 15000, 'clientes voltarem ao menu').then(function () {
-          var aviso = doc(1).getElementById('menu-aviso').textContent;
-          verificar(/anfitrião saiu/.test(aviso), 'anfitrião saiu → clientes voltaram ao menu com aviso: "' + aviso + '"');
+          var c = IT(novo).online.conexao();
+          return c && c.anfitriao;
+        }, 15000, NOMES[novo] + ' assumir como anfitrião').then(function () {
+          var t1 = IT(novo).jogo.tempoRestante;
+          verificar(true, 'anfitrião saiu → ' + NOMES[novo] + ' (o próximo da lista) virou o anfitrião');
+          return esperar(2500).then(function () {
+            var t2 = IT(novo).jogo.tempoRestante;
+            verificar(restantes.every(function (i) { return estado(i) === 'jogando'; }) && t2 < t1 - 1,
+              'a partida continuou com o novo anfitrião (relógio ' + t1.toFixed(1) + ' → ' + t2.toFixed(1) + ')');
+            var ana = IT(novo).jogo.jogadores.filter(function (j) { return j.nome === NOMES[0]; })[0];
+            verificar(ana && ana.tipo === 'cpu', 'o explorador da Ana (anfitriã antiga) virou CPU');
+            restantes.forEach(function (i) {
+              if (i === novo) return;
+              verificar(IT(i).online.conexao().sala.anfitriao === IT(novo).online.conexao().cid,
+                NOMES[i] + ' reconhece ' + NOMES[novo] + ' como novo anfitrião');
+            });
+            var a = IT(novo).jogo.grade, b = IT(restantes[restantes.length - 1]).jogo.grade, dif = 0;
+            for (var k = 0; k < a.total; k++) if (a.donos[k] !== b.donos[k]) dif++;
+            verificar(dif <= a.total * 0.02, 'mapa igual entre o novo anfitrião e os outros (diferença de ' + dif + ')');
+          });
         });
       });
     }
@@ -224,8 +250,8 @@
         var r0 = rankingTexto(0);
         verificar(true, nome + ': ranking apareceu em todas as janelas: ' + r0);
         for (var i = 1; i < N; i++) verificar(rankingTexto(i) === r0, nome + ': ranking igual na janela de ' + NOMES[i]);
-        verificar(doc(1).getElementById('botao-jogar-de-novo').hidden &&
-          !doc(1).getElementById('fim-espera').hidden, nome + ': cliente vê "Esperando o anfitrião…"');
+        verificar(doc(1).getElementById('botao-jogar-de-novo').textContent.indexOf('Revanche') !== -1,
+          nome + ': todos veem o botão "🔁 Revanche"');
       }, function (e) { clearInterval(teclas); throw e; });
     }
 

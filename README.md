@@ -72,11 +72,34 @@ Em "Jogar Offline" aparece a **tela de configuração**:
 
 Os números (tamanhos, metas, tempo) ficam em `js/config.js`.
 
+### Primeira partida guiada
+
+Na primeira vez que alguém aperta **Jogar** no modo offline, começa uma
+partida guiada de uns 20 segundos, em 3 passos que só avançam quando a criança
+faz a ação: **sair de casa**, **virar** e **voltar para casa** (a casa pisca e
+uma casinha pula embaixo dela). No fim, "Muito bem! Só não pise no seu próprio
+rastro" e o botão **Vamos jogar!** começa a partida que ela escolheu. Dá para
+**Pular** a qualquer momento e rever pelo botão **❓ Como jogar** do menu. Se
+pisar no próprio rastro no meio, recomeça com "Tudo bem, tente de novo!". O
+aparelho lembra que o tutorial já foi feito.
+
+### Som
+
+Efeitos curtos gerados na hora (Web Audio, sem arquivos de áudio): notinhas
+subindo ao **pintar**, "uó-uó" no **Ops!**, "tchic" ao **cortar** o rastro de
+alguém, um clique baixinho ao **virar**, **fanfarra** quando você vence e uma
+melodia amigável quando a partida acaba. Só tocam os sons de quem joga neste
+aparelho. Liga/desliga em **⏸ → 🔊 Som** (fica salvo).
+
 ### Online
 
 1. Toque em **Jogar Online** e escreva seu nome.
 2. Quem vai ser o **anfitrião** toca em **Criar sala**. Aparece um código
    fácil de ditar, como **TINTA-4821**.
+   Na sala, **🔗 Convidar amigos** compartilha (celular) ou copia (computador)
+   um link como `https://ilhas-de-tinta.vercel.app/?sala=4821`: quem abre o
+   link já cai na tela online com o código preenchido — é só escrever o nome e
+   tocar em **Entrar**.
 3. Os amigos tocam em **Entrar**, digitam o código (pode ser só `4821`) e
    pronto: todos aparecem na lista da sala, cada um com sua cor. Cada um pode
    trocar para uma cor que esteja livre.
@@ -84,8 +107,10 @@ Os números (tamanhos, metas, tempo) ficam em `js/config.js`.
    e aperta **Jogar**. São de 2 a 4 jogadores no total.
 5. Cada um joga no próprio aparelho com **W A S D**, **setas** ou os **botões
    na tela**.
-6. No fim aparece o ranking. O anfitrião escolhe **Jogar de novo** ou **Voltar
-   para a sala**; os outros esperam ou saem.
+6. No fim aparece o ranking e **todos** veem **🔁 Revanche**: cada um toca
+   para votar ("Querem revanche: Ana, Beto — 2 de 3") e, quando todos os
+   humanos votam, outra partida começa sozinha. O anfitrião também pode
+   **Voltar para a sala**.
 
 - **Celular e computador jogam juntos**, com qualquer um dos dois como
   anfitrião. Cada aparelho tem a **própria câmera** (o celular segue o seu
@@ -100,7 +125,15 @@ Os números (tamanhos, metas, tempo) ficam em `js/config.js`.
   mensagens do anfitrião param de chegar por 2,5 s (internet lenta), os outros
   veem "Esperando o anfitrião… ⏳". O anfitrião pode pausar pelo ⏸; para os
   outros, o ⏸ só abre o menu (a partida continua).
-- Se o **anfitrião sair**, todos voltam ao menu com um aviso.
+- **Troca de anfitrião:** se o anfitrião **sai da sala** (fechou o jogo,
+  caiu a internet) ou fica **mais de 15 s fora da tela** (celular bloqueado),
+  o **próximo jogador da lista da sala vira o anfitrião** e a partida
+  **continua de onde estava** (todos já têm o mapa, as posições e o relógio).
+  Aparece "Fulano agora é o anfitrião 👑". O explorador do antigo anfitrião
+  passa a ser jogado pela CPU; quando ele volta para a tela, vira jogador
+  comum e recebe o explorador de volta. Cada troca tem um número de "eleição"
+  e vale sempre a mais nova, então nunca ficam dois anfitriões. Só quando não
+  sobra nenhum outro humano a sala acaba e a pessoa volta ao menu.
 - Se outro jogador **sair no meio da partida**, o explorador dele passa a ser
   jogado pela **CPU (nível Médio)** até o fim, para a partida continuar justa.
 - Sem internet, abrindo o arquivo direto (file://) ou se o Supabase não
@@ -294,7 +327,9 @@ js/vendor/            supabase-js 2.119.0 (cópia local, versão fixa)
 sw.js                 service worker (cache para funcionar sem internet)
 manifest.webmanifest  dados para instalar o jogo como aplicativo
 icones/               ícones do jogo (SVG e PNG)
-js/instalar.js        instalar como app (botão, dica do iPhone, atalhos, atualização)
+js/instalar.js        instalar como app (botão, dica do iPhone, atalhos, convite, atualização)
+js/som.js             efeitos sonoros gerados na hora (Web Audio)
+js/tutorial.js        primeira partida guiada ("Como jogar")
 vercel.json           cabeçalhos de cache para a hospedagem
 js/game.js            loop (requestAnimationFrame), regras e estados:
                       menu → configuração/online/sala → jogando → fim
@@ -339,6 +374,8 @@ rastro (`Grade.capturar(N)` em `js/grid.js`):
 - `tests/celular/teste_instalar.py` — confere que o Chrome considera o site
   instalável, o botão Instalar, a dica do iPhone, o modo instalado, os atalhos
   e a atualização segura (só recarrega fora da partida).
+- `tests/celular/teste_convite.py` — o desktop cria a sala e convida; o
+  celular abre o link e entra com um toque.
 - `tests/celular/` — testes com **toque de verdade** no Chrome headless
   (celular emulado, `Input.dispatchTouchEvent`) e uma partida online real
   **celular × desktop** trocando quem é o anfitrião. Precisa de `python3` e
@@ -360,10 +397,12 @@ IlhasDeTinta.config.TEMPO_LIMITE = 15;    // partida de 15 segundos
 
 ## Limitações conhecidas
 
-- **Online — o anfitrião precisa ficar com o jogo aberto e visível.** Se ele
-  sai da tela, a partida pausa para todos (veja acima). Se o celular do
-  anfitrião ficar bloqueado por muito tempo, o sistema pode fechar a conexão e
-  aí os outros voltam ao menu ("O anfitrião saiu da sala").
+- **Online — anfitrião fora da tela:** a partida pausa por até 15 s e depois
+  outro jogador assume (veja "Troca de anfitrião"). Se o anfitrião sumir no
+  meio de um lote de mensagens, quem assume pode estar até ~0,1 s atrasado em
+  relação a ele (imperceptível na prática).
+- **Som:** o navegador só deixa tocar som depois do primeiro toque/tecla; no
+  iPhone, o botão lateral de silencioso também cala o jogo.
 - **Celular:** a vibração não existe no iPhone (Safari) e a tela cheia
   também não; o Wake Lock só funciona em navegadores que o suportam (no iPhone,
   iOS 16.4+). Vários jogadores no mesmo celular não é suportado de forma

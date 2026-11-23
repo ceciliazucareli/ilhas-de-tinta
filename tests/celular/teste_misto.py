@@ -112,6 +112,31 @@ def jogar_rodada(cel, desk, anfitriao_cel, nome_foto):
             tocar(cel, 'pausa-continuar'); time.sleep(1)
             ok(desk.js('document.getElementById("aviso-rede").hidden'), 'anfitrião tocou em Continuar: aviso sumiu no desktop')
             inicio += 4.5  # o tempo pausado não conta
+
+            # Agora o celular-anfitrião fica FORA da tela por mais de 15 s: o desktop assume.
+            cel.js('Object.defineProperty(document, "visibilityState", {configurable: true, get: function(){return "hidden"}}); document.dispatchEvent(new Event("visibilitychange"))')
+            t0 = time.time()
+            try:
+                desk.esperar('IlhasDeTinta.online.conexao().anfitriao', 25); assumiu = True
+            except TimeoutError: assumiu = False
+            ok(assumiu, 'celular-anfitrião fora da tela: o desktop assumiu a partida depois de %.0f s' % (time.time() - t0))
+            t1 = desk.js('IlhasDeTinta.jogo.tempoRestante'); time.sleep(2)
+            ok(desk.js('IlhasDeTinta.jogo.tempoRestante') < t1 - 1, 'a partida continua no desktop (novo anfitrião)')
+            ok(desk.js('IlhasDeTinta.jogo.jogadores.filter(function(j){return j.nome==="Lia"})[0].tipo') == 'cpu', 'enquanto isso, a CPU joga pela Lia')
+            desk.foto(S + '/misto-troca-desk.png')
+            # O celular volta para a tela: percebe que não é mais o anfitrião e continua como jogador.
+            cel.js('Object.defineProperty(document, "visibilityState", {configurable: true, get: function(){return "visible"}}); document.dispatchEvent(new Event("visibilitychange"))')
+            try:
+                cel.esperar('!IlhasDeTinta.online.conexao().anfitriao', 15); voltou = True
+            except TimeoutError: voltou = False
+            ok(voltou, 'celular voltou e virou jogador comum (sem dois anfitriões)')
+            if cel.js('IlhasDeTinta.jogo.menuAberto'): tocar(cel, 'pausa-continuar')
+            try:
+                desk.esperar('IlhasDeTinta.jogo.jogadores.filter(function(j){return j.nome==="Lia"})[0].tipo === "humano"', 15); devolveu = True
+            except TimeoutError: devolveu = False
+            ok(devolveu, 'o desktop devolveu o explorador da Lia para o celular')
+            cel.foto(S + '/misto-troca-cel.png')
+            inicio += time.time() - t0
     for a in (cel, desk): a.esperar('IlhasDeTinta.jogo.estado === "fim"', 15)
     r1 = cel.js('document.getElementById("fim-ranking").innerText.replace(/\\s+/g," ")')
     r2 = desk.js('document.getElementById("fim-ranking").innerText.replace(/\\s+/g," ")')
@@ -120,12 +145,14 @@ def jogar_rodada(cel, desk, anfitriao_cel, nome_foto):
     print('      células:', pct)
     if nome_foto == 'a': cel.foto(S + '/celular-ranking.png')
     cel.foto(S + '/misto-%s-cel-fim.png' % nome_foto); desk.foto(S + '/misto-%s-desk-fim.png' % nome_foto)
-    # sai todo mundo para a próxima rodada
-    host.js('IlhasDeTinta.online.sair("")'); t0 = time.time()
+    # Quem é o anfitrião agora (na rodada 1 pode ter mudado) sai: o outro assume a sala.
+    atual, outro = (cel, desk) if cel.js('IlhasDeTinta.online.conexao().anfitriao') else (desk, cel)
+    atual.js('IlhasDeTinta.online.sair("")'); t0 = time.time()
     try:
-        cli.esperar('IlhasDeTinta.jogo.estado === "menu"', 15); voltou = True
-    except TimeoutError: voltou = False
-    ok(voltou, 'anfitrião saiu: o outro voltou ao menu em %.1f s (%s)' % (time.time() - t0, cli.js('document.getElementById("menu-aviso").textContent')))
+        outro.esperar('IlhasDeTinta.online.conexao() && IlhasDeTinta.online.conexao().anfitriao', 15); virou = True
+    except TimeoutError: virou = False
+    ok(virou, 'anfitrião saiu na tela de fim: o outro virou anfitrião em %.1f s (pode pedir revanche contra a CPU)' % (time.time() - t0))
+    outro.js('IlhasDeTinta.online.sair("")'); time.sleep(1)
     for a in (cel, desk):
         e = a.erros(); ok(e == '[]', 'sem erros no console: ' + e)
 

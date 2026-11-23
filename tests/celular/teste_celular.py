@@ -20,6 +20,30 @@ try:
     a.js('IlhasDeTinta.setup.modoSimples(true, 3)')
     r = json.loads(a.js('JSON.stringify(document.getElementById("botao-jogar").getBoundingClientRect())'))
     a.tocar(r['x'] + r['width'] / 2, r['y'] + r['height'] / 2); time.sleep(0.8)
+
+    # ---- Primeira vez: partida guiada (tutorial), feita com toques de verdade ----
+    def tut(): return a.js('document.getElementById("tutorial").hidden ? "-" : document.getElementById("tutorial-titulo").textContent')
+    def pos(): return json.loads(a.js('JSON.stringify((function(e){return {x:e.x,y:e.y,ax:e.alvoX,ay:e.alvoY,d:e.direcao}})(IlhasDeTinta.jogo.jogadores[0].explorador))'))
+    print('tutorial passo 1:', tut(), '| ativo:', a.js('IlhasDeTinta.jogo.tutorial'))
+    a.foto(S + '/celular-tutorial-1.png')
+    a.deslizar([(195, 520), (195, 450)])                      # para cima: sai de casa
+    a.esperar('IlhasDeTinta.jogo.grade.temRastro(1)', 5); time.sleep(0.2)
+    print('tutorial passo 2:', tut())
+    a.esperar('IlhasDeTinta.jogo.jogadores[0].explorador.y <= 6', 5)
+    a.deslizar([(195, 520), (265, 520)])                      # vira para a direita
+    time.sleep(0.3); print('tutorial passo 3:', tut())
+    a.foto(S + '/celular-tutorial-3.png')
+    a.esperar('IlhasDeTinta.jogo.jogadores[0].explorador.x >= 17', 5)
+    a.deslizar([(195, 450), (195, 520)])                      # desce
+    a.esperar('IlhasDeTinta.jogo.jogadores[0].explorador.alvoY >= 9', 6)
+    a.deslizar([(265, 520), (195, 520)])                      # volta para a esquerda: casa!
+    a.esperar('IlhasDeTinta.jogo.jogadores[0].estatisticas.capturas > 0', 6); time.sleep(0.3)
+    print('tutorial fim:', tut(), '| botão Vamos jogar visível:', not a.js('document.getElementById("tutorial-jogar").hidden'))
+    a.foto(S + '/celular-tutorial-fim.png')
+    r = json.loads(a.js('JSON.stringify(document.getElementById("tutorial-jogar").getBoundingClientRect())'))
+    a.tocar(r['x'] + r['width'] / 2, r['y'] + r['height'] / 2); time.sleep(0.8)
+    print('depois do tutorial: jogadores=', a.js('IlhasDeTinta.jogo.jogadores.length'), '| tutorial salvo:', a.js('localStorage.getItem("ilhas-de-tinta:tutorial-feito")'))
+    print('sons tocados:', a.js('JSON.stringify(IlhasDeTinta.som.contagem)'))
     print('jogando:', a.js('IlhasDeTinta.jogo.estado + " jogadores=" + IlhasDeTinta.jogo.jogadores.length + " dica=" + !document.getElementById("dica-inicio").hidden + " texto=" + document.getElementById("dica-texto").textContent'))
     print('câmera:', a.js('JSON.stringify(IlhasDeTinta.renderer.camera())'))
     a.foto(S + '/celular-dica.png')

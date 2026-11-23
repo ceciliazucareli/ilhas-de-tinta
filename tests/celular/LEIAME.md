@@ -25,3 +25,12 @@ python3 tests/celular/teste_misto.py   /tmp/fotos     # online: celular x deskto
   — primeiro o celular é o anfitrião, depois o desktop. Confere câmera local
   em cada aparelho, mapa e ranking iguais, o anfitrião no celular "saindo da
   tela" (pausa e aviso no desktop) e a volta ao menu quando o anfitrião sai.
+- `teste_instalar.py`: critérios de instalação do Chrome, botão "Instalar",
+  dica do iPhone, modo instalado, atalhos e atualização só fora da partida.
+- `teste_convite.py`: o desktop cria a sala e toca em "Convidar"; o celular
+  abre o link `?sala=1234` e entra com um toque.
+
+O `teste_celular.py` também faz a **primeira partida guiada** com toques de
+verdade (sair de casa, virar, voltar), e o `teste_misto.py` testa a **troca de
+anfitrião**: o celular-anfitrião fica 15 s fora da tela, o desktop assume, e
+quando o celular volta ele recebe o explorador de volta.
