@@ -20,6 +20,7 @@
       python3 -m http.server   →   http://localhost:8000/tests/online.html
     Opções: ?jogadores=4 (4 humanos online)   ?tempo=25 (segundos de partida)
             ?parar=sala|partida|fim (para no meio, para tirar fotos)   ?grande=1
+            ?nivel=0..3 (nível da CPU com 2 jogadores: Fácil, Médio, Difícil, Desafio)
 
     Roteiro: o J1 cria a sala, os outros entram com o código, alguém troca de
     cor, o anfitrião completa com CPU (com 2 jogadores) e aperta Jogar; todos
@@ -158,7 +159,7 @@
         // 4) Com 2 humanos o anfitrião completa com 1 CPU Fácil.
         if (N === 2) {
           doc(0).querySelectorAll('#sala-cpus .opcao')[1].click();
-          doc(0).querySelectorAll('#sala-nivel .opcao')[0].click();
+          doc(0).querySelectorAll('#sala-nivel .opcao')[+(params.get('nivel') || 0)].click();
         }
         clicar(0, 'sala-jogar');
         return ate(function () {
@@ -229,7 +230,9 @@
     function jogarAteOFim(nome) {
       var codigos = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD'];
       var meio = false;
+      var viuCacada = false;
       var teclas = setInterval(function () {
+        if (IT(1).jogo.jogadores.some(function (j) { return j.cacando; })) viuCacada = true;
         janelas.forEach(function (f, i) { if (estado(i) === 'jogando') tecla(i, codigos[Math.floor(Math.random() * 8)]); });
         // No meio da partida, confere se o mapa do cliente bate com o do anfitrião.
         if (!meio && IT(0).jogo.tempoRestante < TEMPO / 2) {
@@ -247,6 +250,8 @@
         return janelas.every(function (f, i) { return estado(i) === 'fim'; });
       }, (TEMPO + 25) * 1000, 'ranking').then(function () {
         clearInterval(teclas);
+        var temDesafio = IT(0).jogo.jogadores.some(function (j) { return j.dificuldade === 'desafio'; });
+        if (temDesafio) verificar(viuCacada, nome + ': o cliente viu o aviso 😈 da CPU Desafio caçando');
         var r0 = rankingTexto(0);
         verificar(true, nome + ': ranking apareceu em todas as janelas: ' + r0);
         for (var i = 1; i < N; i++) verificar(rankingTexto(i) === r0, nome + ': ranking igual na janela de ' + NOMES[i]);

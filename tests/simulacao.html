@@ -44,14 +44,40 @@
       { nome: '1 humano parado + CPU Difícil', vagas: [{ tipo: 'humano', cor: 'rosa', nome: 'Humano' }, cpu('azul', 'dificil', 'CPU Difícil')] },
       { nome: '3 CPUs (Fácil, Médio, Difícil)', vagas: [cpu('rosa', 'facil', 'Fácil'), cpu('azul', 'medio', 'Médio'), cpu('amarelo', 'dificil', 'Difícil')] },
       { nome: '4 CPUs (Fácil, Médio, Difícil, Difícil)', vagas: [cpu('rosa', 'facil', 'Fácil'), cpu('azul', 'medio', 'Médio'), cpu('amarelo', 'dificil', 'Difícil A'), cpu('roxo', 'dificil', 'Difícil B')] },
-      { nome: '4 CPUs Médio', vagas: [cpu('rosa', 'medio', 'M1'), cpu('azul', 'medio', 'M2'), cpu('amarelo', 'medio', 'M3'), cpu('roxo', 'medio', 'M4')] }
+      { nome: '4 CPUs Médio', vagas: [cpu('rosa', 'medio', 'M1'), cpu('azul', 'medio', 'M2'), cpu('amarelo', 'medio', 'M3'), cpu('roxo', 'medio', 'M4')] },
+      { nome: '1 CPU Desafio + 3 CPUs (Desafio contra CPUs)', vagas: [cpu('rosa', 'desafio', 'Desafio'), cpu('azul', 'medio', 'Médio'), cpu('amarelo', 'dificil', 'Difícil'), cpu('roxo', 'facil', 'Fácil')] }
     ];
+
+    // "Humano robô": uma pessoa de mentira (tipo humano, velocidade de gente)
+    // controlada por um cérebro de CPU, para medir o Desafio contra "pessoas".
+    //   cuidadoso = cérebro Médio (volta quando alguém chega perto)
+    //   descuidado = cérebro Fácil (voltas pequenas, vira ao acaso às vezes)
+    //   esperto    = voltas curtas e volta para casa quando alguém chega perto
+    //                (o que uma criança aprende a fazer contra o Desafio 😈)
+    function robo(cor, perfil, nome) { return { tipo: 'humano', cor: cor, nome: nome, robo: perfil }; }
+    var REPETICOES = +(params.get('repeticoes') || 4);
+    [['dificil', 'Difícil'], ['desafio', 'Desafio']].forEach(function (nivel) {
+      [['medio', 'cuidadoso'], ['facil', 'descuidado'], ['esperto', 'esperto']].forEach(function (perfil) {
+        for (var r = 0; r < REPETICOES; r++) {
+          CENARIOS.push({
+            nome: 'robô ' + perfil[1] + ' x CPU ' + nivel[1] + ' #' + (r + 1),
+            grupo: 'robô ' + perfil[1] + ' x CPU ' + nivel[1],
+            vagas: [robo('rosa', perfil[0], 'Robô'), cpu('azul', nivel[0], 'CPU ' + nivel[1])]
+          });
+        }
+      });
+    });
+    var resumo = {}; // grupo → { partidas, vitoriasRobo, cortesNoRobo, cortesDoRobo, pctRobo, pctCpu }
 
     var frame = document.getElementById('jogo');
     frame.addEventListener('load', function () {
       var w = frame.contentWindow;
       w.addEventListener('error', function (e) { erros.push(e.message); });
       var IT = w.IlhasDeTinta;
+      IT.ia.NIVEIS.esperto = {
+        profundidade: [2, 3], lado: [2, 4], candidatos: 4, acaso: 0, seguro: true,
+        rastroMax: 8, medo: 6, caca: 0
+      };
       IT.config.TEMPO_LIMITE = TEMPO;
       var i = 0;
 
@@ -92,6 +118,13 @@
         if (i >= CENARIOS.length) return terminar();
         var c = CENARIOS[i++];
         IT.jogo.jogar({ vagas: c.vagas });
+        IT.jogo.jogadores.forEach(function (j, i) {
+          var perfil = c.vagas[i].robo;
+          if (!perfil) return;
+          j.dificuldade = perfil;
+          j.ia = IT.ia.criar(j, IT.jogo);
+          j.explorador.controlador = j.ia; // continua "humano" e na velocidade de gente
+        });
         var quadros = 0, limite = (TEMPO + 5) / DT;
         // Avança 600 quadros (10 s de jogo) por vez até a partida acabar.
         var t = setInterval(function () {
@@ -107,6 +140,17 @@
               Math.floor(r.fracao * 100) + '%  capturas=' + e.capturas + ' cortes=' + e.cortes +
               ' rastroCortado=' + e.rastroCortado + ' pisouNoProprio=' + e.proprioRastro;
           });
+          if (c.grupo) {
+            var g = resumo[c.grupo] = resumo[c.grupo] || { partidas: 0, vitoriasRobo: 0, cortesNoRobo: 0, cortesDoRobo: 0, pctRobo: 0, pctCpu: 0 };
+            var rk = IT.jogo.ranking(), rob = rk.filter(function (r) { return r.jogador.tipo === 'humano'; })[0];
+            var cpuR = rk.filter(function (r) { return r.jogador.tipo === 'cpu'; })[0];
+            g.partidas++;
+            if (rk[0].jogador === rob.jogador) g.vitoriasRobo++;
+            g.cortesNoRobo += rob.jogador.estatisticas.rastroCortado;
+            g.cortesDoRobo += rob.jogador.estatisticas.cortes;
+            g.pctRobo += rob.fracao * 100;
+            g.pctCpu += cpuR.fracao * 100;
+          }
           if (!acabou) { falhas++; log('FALHA - ' + c.nome + ': a partida não terminou'); }
           else log('ok   - ' + c.nome + ' — ' + Math.round(quadros * DT) + ' s de jogo — ' + w.document.getElementById('fim-titulo').textContent);
           linhas.forEach(log);
@@ -115,6 +159,16 @@
       }
 
       function terminar() {
+        log('');
+        log('RESUMO (média por partida de ' + TEMPO + ' s):');
+        Object.keys(resumo).forEach(function (nome) {
+          var g = resumo[nome], n = g.partidas;
+          log('  ' + nome + ': robô venceu ' + g.vitoriasRobo + '/' + n +
+            ' | rastro do robô cortado ' + (g.cortesNoRobo / n).toFixed(1) + 'x' +
+            ' | robô cortou a CPU ' + (g.cortesDoRobo / n).toFixed(1) + 'x' +
+            ' | território robô ' + (g.pctRobo / n).toFixed(0) + '% x CPU ' + (g.pctCpu / n).toFixed(0) + '%');
+        });
+        window.resumoSimulacao = resumo;
         if (erros.length) { falhas++; log('ERROS NO CONSOLE:\n' + erros.join('\n')); }
         log(falhas ? falhas + ' falha(s)' : 'Todas as simulações passaram.');
         window.resultadoSimulacao = { falhas: falhas, texto: saida.join('\n') };
