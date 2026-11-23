@@ -704,7 +704,7 @@
     return IT.jogo.jogadores.map(function (j) {
       var e = j.explorador;
       return [e.x, e.y, e.alvoX, e.alvoY, Math.round(e.progresso * 100),
-        e.direcao ? DIRS.indexOf(e.direcao) : -1, DIRS.indexOf(e.ultimaDirecao)];
+        e.direcao ? DIRS.indexOf(e.direcao) : -1, DIRS.indexOf(e.ultimaDirecao), j.cacando ? 1 : 0];
     });
   }
 
@@ -783,6 +783,7 @@
       e.progresso = p[4] / 100;
       e.direcao = p[5] >= 0 ? DIRS[p[5]] : null;
       e.ultimaDirecao = DIRS[p[6]] || e.ultimaDirecao;
+      jogadores[i].cacando = !!p[7]; // Desafio 😈 caçando (mostra o aviso)
     });
   }
 

@@ -222,6 +222,7 @@
   /* Online: a pessoa voltou para a sala; a CPU devolve o explorador para ela. */
   function devolverParaHumano(j) {
     j.tipo = 'humano';
+    j.cacando = false;
     j.eraHumano = false;
     j.local = false;
     j.ia = null;

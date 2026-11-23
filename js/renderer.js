@@ -292,6 +292,15 @@
     ctx.fillRect(cx - r * 0.7, cy - r * 0.82, r * 1.4, 3);
 
     if (modo === 'multi') desenharEtiqueta(j.nome, cx, cy - r * 1.55, j.cor.escura);
+
+    // Desafio 😈 caçando alguém: aviso bem visível, para dar tempo de fugir.
+    if (j.cacando) {
+      var balanco = Math.sin(tempo * 10) * 2;
+      ctx.font = Math.round(r * 1.5) + 'px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('😈', cx + r * 1.35, cy - r * 0.9 + balanco);
+    }
   }
 
   /* Plaquinha com o nome do jogador, para saber quem é quem. */
