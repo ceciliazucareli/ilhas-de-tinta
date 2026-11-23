@@ -37,7 +37,10 @@ window.IlhasDeTinta = window.IlhasDeTinta || {};
       SUPABASE_URL: 'https://grqjtgoflayhwuspiawc.supabase.co',
       SUPABASE_CHAVE: 'sb_publishable_Ul_-ZY7Y7USJOj5fIJNHAQ_4VYB4Tnt',
       PREFIXO_CODIGO: 'TINTA',      // códigos de sala do tipo TINTA-4821
-      ENVIOS_POR_SEGUNDO: 10,       // mensagens de estado do anfitrião por segundo
+      // Mensagens de estado do anfitrião por segundo. 6 (não 10): cada mensagem conta
+      // 1 + (jogadores - 1) no Supabase; os aparelhos "preveem" o movimento entre
+      // uma e outra, então continua suave (issue #5, medido em tests/celular/medir_online.py).
+      ENVIOS_POR_SEGUNDO: 6,
       SNAPSHOT_A_CADA: 3,           // segundos entre fotos completas do mapa
       TEMPO_CONEXAO: 8,             // segundos para desistir de conectar
       TEMPO_PROCURAR_SALA: 4,       // segundos esperando o anfitrião aparecer

@@ -92,6 +92,9 @@
 
         var tecla = mapa[e.code];
         if (tecla) {
+          // Segurar a tecla repete o evento ~30x/s: só a primeira vale (no online,
+          // cada repetição viraria uma mensagem — issue #5).
+          if (e.repeat) { if (document.body.classList.contains('em-jogo')) e.preventDefault(); return; }
           if (aoDirecionar(tecla.esquema, tecla.direcao)) e.preventDefault();
         } else if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'NumpadEnter') && aoConfirmar &&
                    alvo !== 'BUTTON') { // num botão focado, Enter/Espaço já clicam nele

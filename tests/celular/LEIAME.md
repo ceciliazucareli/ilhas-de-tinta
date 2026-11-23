@@ -32,5 +32,12 @@ python3 tests/celular/teste_misto.py   /tmp/fotos     # online: celular x deskto
 
 O `teste_celular.py` também faz a **primeira partida guiada** com toques de
 verdade (sair de casa, virar, voltar), e o `teste_misto.py` testa a **troca de
-anfitrião**: o celular-anfitrião fica 15 s fora da tela, o desktop assume, e
+anfitrião**: o celular-anfitrião fica mais de 30 s (tolerância) fora da tela, o desktop assume, e
 quando o celular volta ele recebe o explorador de volta.
+- `teste_quedas.py`: quedas e reconexão (issue #6) — congela a aba de verdade,
+  derruba a rede e o WebSocket, recarrega a página; sala de espera e partida;
+  quem chega no meio (espectador) e "Voltar para a sala". Uso:
+  `python3 tests/celular/teste_quedas.py [cenários...]`.
+- `medir_online.py 2|4 [segundos]`: mede uma partida online — mensagens por
+  tipo e por segundo (o que conta no plano grátis do Supabase) e o atraso da
+  virada para quem não é o anfitrião.

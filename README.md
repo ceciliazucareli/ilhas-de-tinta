@@ -125,9 +125,28 @@ aparelho. Liga/desliga em **⏸ → 🔊 Som** (fica salvo).
   mensagens do anfitrião param de chegar por 2,5 s (internet lenta), os outros
   veem "Esperando o anfitrião… ⏳". O anfitrião pode pausar pelo ⏸; para os
   outros, o ⏸ só abre o menu (a partida continua).
-- **Troca de anfitrião:** se o anfitrião **sai da sala** (fechou o jogo,
-  caiu a internet) ou fica **mais de 15 s fora da tela** (celular bloqueado),
-  o **próximo jogador da lista da sala vira o anfitrião** e a partida
+- **Quedas curtas não derrubam ninguém.** Quando o celular bloqueia ou a aba
+  fica oculta, o navegador congela a página e a conexão com o Supabase cai.
+  O jogo **reconecta sozinho** com a mesma identidade ("Reconectando… 🔄") —
+  na hora em que a pessoa volta, quando a internet volta, ou a cada 4 s — e
+  pede o estado completo. Para os outros, quem sumiu fica "**Fulano saiu um
+  pouquinho ⏳**" e só conta como saída depois da **tolerância: 30 s na
+  partida e 60 s na sala de espera**. Na partida, enquanto isso, a CPU segura
+  o explorador e devolve quando a pessoa volta ("Fulano voltou! 🎉").
+- **Recarregar a página volta para a sala** (código e identidade ficam no
+  `sessionStorage` da aba por até 30 min). Quem recarrega no meio da partida
+  volta para dentro dela, com o mesmo explorador. Se quem recarregou era o
+  anfitrião (e perdeu o jogo, que estava só na memória dele), outro jogador
+  assume **na hora** e ele volta como jogador comum. Se ele estava sozinho na
+  sala de espera, a sala continua com ele.
+- **Chegou no meio da partida?** Entra na sala e **assiste** a partida que
+  está acontecendo ("👀 Assistindo! Você entra na próxima partida.") — vê o
+  mapa e o ranking, mas não controla ninguém — e joga a partir da próxima
+  (revanche ou "Voltar para a sala").
+- **Troca de anfitrião:** se o anfitrião **sai da sala** e não volta dentro da
+  tolerância (30 s na partida, 60 s na sala de espera), fica **mais de 30 s
+  fora da tela** (celular bloqueado) ou **recarrega a página**, o **próximo
+  jogador da lista da sala vira o anfitrião** e a partida
   **continua de onde estava** (todos já têm o mapa, as posições e o relógio).
   Aparece "Fulano agora é o anfitrião 👑". O explorador do antigo anfitrião
   passa a ser jogado pela CPU; quando ele volta para a tela, vira jogador
@@ -152,8 +171,15 @@ Realtime** (canais **Broadcast** e **Presence**) para repassar mensagens:
 - O navegador de quem **cria a sala** é o **anfitrião**: ele roda a partida de
   verdade, com o mesmo código do modo offline (inclusive as CPUs).
 - Os outros aparelhos só mandam **mudanças de direção** quando o jogador aperta
-  uma tecla.
-- O anfitrião manda **10 mensagens por segundo** com as posições, o relógio e
+  uma tecla (segurar a tecla não repete a mensagem), junto com a **célula onde
+  querem virar**.
+- **Sem atraso na virada (previsão):** quem não é o anfitrião vê o próprio
+  explorador virar **na hora**, como no modo offline — o aparelho dele anda com
+  o próprio explorador e o anfitrião aplica a virada **naquela mesma célula**,
+  mesmo que a mensagem chegue um pouco depois (se o explorador acabou de passar
+  dela, ele "volta" e vira de lá). Se a previsão divergir (um "Ops!", um corte),
+  o explorador desliza até a posição certa em vez de pular.
+- O anfitrião manda **6 mensagens por segundo** com as posições, o relógio e
   só as **células que mudaram**; a cada **3 segundos** manda uma **foto
   completa** do mapa (e também quando alguém perde mensagens).
 - Os outros aparelhos desenham o que chega e **interpolam** o movimento entre
@@ -164,45 +190,43 @@ A URL do projeto e a chave **publicável** do Supabase ficam em `js/config.js`
 (seção `ONLINE`); essa chave é pública por design. Não há login, chat nem
 pagamento.
 
-#### Limites do plano grátis do Supabase (estimativa)
+#### Limites do plano grátis do Supabase (medidos)
 
-Confira os números atuais em <https://supabase.com/docs/guides/realtime/limits>
-— na época em que isto foi escrito, o plano grátis do Realtime permitia cerca de
-**200 conexões simultâneas**, **2 milhões de mensagens por mês** e **100
-mensagens por segundo** no projeto todo. O Supabase conta cada mensagem
-**recebida** por cada aparelho.
+**Limites oficiais do plano grátis** (Supabase Realtime, conferidos em
+novembro de 2026 em [Realtime Limits](https://supabase.com/docs/guides/realtime/limits),
+[Realtime Pricing](https://supabase.com/docs/guides/realtime/pricing) e
+[Manage Realtime Messages](https://supabase.com/docs/guides/platform/manage-your-usage/realtime-messages)):
 
-| Partida de 2 min | Mensagens por segundo | Mensagens por partida | Partidas por mês (2 mi) |
-| --- | --- | --- | --- |
-| 2 humanos online | ~20 | ~2.700 | ~700 |
-| 4 humanos online | ~40 | ~6.000 | ~330 |
+| Limite | Plano grátis |
+| --- | --- |
+| Conexões simultâneas | 200 |
+| Mensagens por segundo (projeto todo) | 100 |
+| Mensagens por mês | 2 milhões |
+| Tamanho de uma mensagem Broadcast | 256 KB |
+| Mensagens de Presence por segundo | 20 |
+| Entradas em canal por segundo | 100 |
 
-(Anfitrião: 10/s × 120 s = 1.200 envios, recebidos por cada um dos outros;
-mais as teclas, que todos recebem.) Com 100 mensagens/s no projeto todo, cabem
-umas **2 salas cheias (4 jogadores) ao mesmo tempo**, ou umas 5 salas de 2.
-Para caber mais salas, diminua `ENVIOS_POR_SEGUNDO` em `js/config.js` (fica um
-pouco menos suave) ou mude de plano.
+**Como contam:** cada mensagem Broadcast conta **1 (envio) + 1 por aparelho que
+recebe** — numa sala de 4, cada mensagem do anfitrião conta 4. Passar de 100
+mensagens/s faz o Supabase desconectar até o ritmo baixar.
 
-## Instalar como app
+**Medido de verdade** (`python3 tests/celular/medir_online.py 2|4`: partidas de
+2 minutos pelo Supabase, cada jogador num Chrome, todos virando a cada ~1 s):
 
-O jogo é um **web app instalável (PWA)**: depois de instalado, abre pelo ícone,
-em tela cheia, sem a barra do navegador, e funciona offline.
+| Partida de 2 min | Antes | Agora | Por segundo | Salas ao mesmo tempo (100/s) | Partidas por mês (2 mi) |
+| --- | --- | --- | --- | --- | --- |
+| 2 jogadores | 2.664 | **1.702** | 14 | ~6 | ~1.170 (~39/dia) |
+| 4 jogadores | 6.258 | **4.234** | 35 | **2** | ~470 (~15/dia) |
 
-- **Android / Chrome / Edge (inclusive no computador):** no menu aparece o
-  botão **📲 Instalar o jogo** quando o navegador permite. (Também dá pelo menu
-  do navegador: "Instalar app" / "Adicionar à tela inicial".)
-- **iPhone / iPad (Safari):** o menu mostra a dica: toque em **Compartilhar**
-  e depois em **Adicionar à Tela de Início**.
-- Já instalado, o botão e a dica somem, e o botão ⛶ também (o app já abre em
-  tela cheia).
-- Segurando o ícone no Android aparecem os atalhos **Jogar Offline** e
-  **Jogar Online**.
-- **Atualizações chegam sozinhas:** o app procura versão nova ao ser aberto e
-  de hora em hora. Quando chega, ele recarrega **só quando é seguro** (no menu,
-  fora de partida e fora de sala online), nunca no meio do jogo.
-- Ícones: `icones/icone-*.png` (normal), `icone-mascaravel-*.png` (Android
-  recorta em círculo) e `icone-apple-180.png` (iPhone). As imagens
-  `icones/tela-*.png` aparecem na janela de instalação do Android.
+O que mais pesa é a mensagem de estado do anfitrião (posições + células que
+mudaram). Para caber mais: ela passou de **10 para 6 por segundo** (os
+aparelhos preveem o movimento entre uma e outra, então continua suave), segurar
+a tecla não manda uma mensagem por repetição, com a partida pausada vai só 1
+por segundo, e ninguém pede o "estado completo" à toa no começo. Mensagens
+médias têm ~200 bytes e a foto completa do mapa ~2 KB (bem abaixo de 256 KB).
+Conexões (1 por jogador) não são o gargalo. Para caber ainda mais, dá para
+baixar `ENVIOS_POR_SEGUNDO` em `js/config.js` (fica menos preciso) ou mudar de
+plano.
 
 ## Funcionar sem internet
 
@@ -403,6 +427,15 @@ rastro (`Grade.capturar(N)` em `js/grid.js`):
 - `tests/celular/teste_instalar.py` — confere que o Chrome considera o site
   instalável, o botão Instalar, a dica do iPhone, o modo instalado, os atalhos
   e a atualização segura (só recarrega fora da partida).
+- `tests/celular/medir_online.py 2|4` — mede uma partida online de verdade:
+  mensagens por tipo (o que o Supabase conta) e o atraso da virada (issue #5 e
+  #7).
+- `tests/celular/teste_quedas.py` — **quedas e reconexão de verdade** (issue
+  #6): congela a aba (`Page.setWebLifecycleState`), derruba o WebSocket e
+  desliga a rede (`Network.emulateNetworkConditions`), recarrega a página.
+  Anfitrião e cliente somem por 5 s, 20 s e além da tolerância, na sala de
+  espera e no meio da partida; também testa quem chega no meio (espectador) e
+  "Voltar para a sala".
 - `tests/celular/teste_convite.py` — o desktop cria a sala e convida; o
   celular abre o link e entra com um toque.
 - `tests/celular/` — testes com **toque de verdade** no Chrome headless
@@ -426,26 +459,34 @@ IlhasDeTinta.config.TEMPO_LIMITE = 15;    // partida de 15 segundos
 
 ## Limitações conhecidas
 
-- **Online — anfitrião fora da tela:** a partida pausa por até 15 s e depois
-  outro jogador assume (veja "Troca de anfitrião"). Se o anfitrião sumir no
-  meio de um lote de mensagens, quem assume pode estar até ~0,1 s atrasado em
-  relação a ele (imperceptível na prática).
+- **Online — anfitrião fora da tela:** a partida fica parada esperando por até
+  30 s (tolerância) e depois outro jogador assume (veja "Troca de anfitrião").
+  Quem assume continua do último estado que recebeu (até ~0,1 s antes de o
+  anfitrião sumir; imperceptível na prática).
+- **Online — celular bloqueado por muito tempo:** o Safari/Chrome do celular
+  congelam a página; ao voltar, ela reconecta. Se a pessoa ficou fora mais que
+  a tolerância, volta como jogador comum (ou espectador, se a partida acabou e
+  começou outra sem ela).
 - **Som:** o navegador só deixa tocar som depois do primeiro toque/tecla; no
   iPhone, o botão lateral de silencioso também cala o jogo.
 - **Celular:** a vibração não existe no iPhone (Safari) e a tela cheia
   também não; o Wake Lock só funciona em navegadores que o suportam (no iPhone,
   iOS 16.4+). Vários jogadores no mesmo celular não é suportado de forma
   confortável (é pensado para o teclado do computador).
-- **Online — atraso:** a direção de quem não é anfitrião chega ao anfitrião com
-  o atraso da internet (normalmente 50–150 ms), então a virada pode acontecer
-  uma célula depois. O anfitrião não tem atraso.
+- **Online — atraso:** a virada de quem não é anfitrião aparece na hora na
+  tela dele (previsão) e acontece na célula certa no anfitrião. Com internet
+  muito lenta (mensagem levando mais que ~0,1 s), o explorador já passou da
+  célula e a virada sai uma célula depois; a previsão então desliza para a
+  posição certa.
 - **Online — confiança:** como o anfitrião simula tudo no navegador dele, quem
   souber mexer no console poderia trapacear. Para um jogo entre amigos e
   família isso é aceitável.
-- **Online — quem chega no meio** de uma partida espera na sala e entra na
-  próxima. Quem sai e volta entra como um jogador novo.
-- **Online — limites do plano grátis** (veja a tabela acima): cerca de 2 salas
-  cheias ao mesmo tempo.
+- **Online — quem chega no meio** de uma partida só assiste até a próxima
+  (escolha mais simples e justa para crianças: ninguém ganha território "de
+  graça" no meio).
+- **Online — limites do plano grátis** (veja a tabela acima): no máximo **2
+  salas de 4 jogadores** (ou ~6 de 2) jogando ao mesmo tempo, e ~470 partidas
+  de 4 por mês.
 - **Sem internet:** só funciona depois de abrir o site uma vez com internet; o
   modo Online sempre precisa de internet. Ao atualizar o jogo é preciso
   aumentar `VERSAO` no `sw.js`.
