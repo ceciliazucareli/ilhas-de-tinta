@@ -4,6 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ilhas de Tinta</title>
+  <meta name="description" content="Jogo infantil de pintar a ilha: conquiste território com seu explorador.">
+  <meta name="theme-color" content="#7ccfff">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icones/icone.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icones/icone-192.png">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -43,13 +48,86 @@
       <canvas id="tela" aria-label="Mapa da ilha"></canvas>
       <div id="mensagem" class="mensagem" role="status" aria-live="polite"></div>
 
-      <!-- Tela de configuração (antes de jogar) -->
-      <div id="tela-configuracao" class="sobreposicao">
-        <div class="cartao cartao-largo">
+      <!-- Menu inicial: Offline ou Online -->
+      <div id="tela-menu" class="sobreposicao tela-cheia">
+        <div class="cartao cartao-menu">
           <h2>Bem-vindo à ilha!</h2>
           <p>Saia do seu território pintado, dê uma voltinha pela grama e
             volte para casa: tudo o que ficar dentro do caminho vira seu!</p>
           <p class="dica">Cuidado para não pisar no próprio rastro de tinta.</p>
+          <div class="menu-botoes">
+            <button id="botao-offline" class="botao-menu">
+              <span class="botao-menu-icone" aria-hidden="true">🏠</span>
+              <span class="botao-menu-titulo">Jogar Offline</span>
+              <span class="botao-menu-texto">Sozinho ou com amigos no mesmo computador</span>
+            </button>
+            <button id="botao-online" class="botao-menu botao-menu-online">
+              <span class="botao-menu-icone" aria-hidden="true">🌍</span>
+              <span class="botao-menu-titulo">Jogar Online</span>
+              <span class="botao-menu-texto">Cada um no seu aparelho, pela internet</span>
+            </button>
+          </div>
+          <p id="menu-aviso" class="aviso-online" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+
+      <!-- Online: criar sala ou entrar com código -->
+      <div id="tela-online" class="sobreposicao tela-cheia" hidden>
+        <div class="cartao cartao-menu">
+          <h2>Jogar Online 🌍</h2>
+          <label class="campo">
+            <span>Seu nome</span>
+            <input id="online-nome" class="campo-texto" maxlength="12" autocomplete="off" placeholder="Seu nome">
+          </label>
+          <button id="online-criar" class="botao botao-grande">✨ Criar sala</button>
+          <p class="ou">ou</p>
+          <label class="campo">
+            <span>Código da sala</span>
+            <input id="online-codigo" class="campo-texto campo-codigo" maxlength="10" autocomplete="off"
+                   placeholder="TINTA-1234" autocapitalize="characters" spellcheck="false">
+          </label>
+          <button id="online-entrar" class="botao botao-grande">🚪 Entrar</button>
+          <p id="online-aviso" class="aviso-online" role="status" aria-live="polite"></p>
+          <button id="online-voltar" class="botao botao-secundario">Voltar</button>
+        </div>
+      </div>
+
+      <!-- Sala de espera online -->
+      <div id="tela-sala" class="sobreposicao tela-cheia" hidden>
+        <div class="cartao cartao-largo">
+          <p class="sala-rotulo">Código da sala</p>
+          <p id="sala-codigo" class="sala-codigo">TINTA-0000</p>
+          <p id="sala-dica" class="dica">Diga este código para seus amigos entrarem!</p>
+
+          <p class="setup-titulo">Quem já chegou</p>
+          <ul id="sala-jogadores" class="sala-jogadores"></ul>
+
+          <div class="vaga-linha sala-minha-cor">
+            <span class="vaga-rotulo">Sua cor</span>
+            <span id="sala-cores" class="sala-cores"></span>
+          </div>
+
+          <div id="sala-anfitriao" class="sala-anfitriao">
+            <div class="vaga-linha">
+              <span class="vaga-rotulo">CPUs</span>
+              <span id="sala-cpus" class="sala-opcoes"></span>
+            </div>
+            <div class="vaga-linha" id="sala-linha-nivel">
+              <span class="vaga-rotulo">Nível</span>
+              <span id="sala-nivel" class="sala-opcoes"></span>
+            </div>
+            <button id="sala-jogar" class="botao botao-grande">Jogar</button>
+          </div>
+          <p id="sala-aviso" class="aviso-online" role="status" aria-live="polite"></p>
+          <button id="sala-sair" class="botao botao-secundario">Sair da sala</button>
+        </div>
+      </div>
+
+      <!-- Tela de configuração do modo offline (antes de jogar) -->
+      <div id="tela-configuracao" class="sobreposicao" hidden>
+        <div class="cartao cartao-largo">
+          <h2>Jogar Offline 🏠</h2>
+          <p class="dica">Sozinho, com amigos no mesmo teclado ou contra a CPU.</p>
 
           <div id="setup" class="setup">
             <p class="setup-titulo">Quantos jogadores?</p>
@@ -57,7 +135,10 @@
             <ul id="setup-vagas" class="setup-vagas"></ul>
           </div>
 
-          <button id="botao-jogar" class="botao botao-grande">Jogar</button>
+          <div class="botoes-fim">
+            <button id="botao-jogar" class="botao botao-grande">Jogar</button>
+            <button id="botao-config-voltar" class="botao botao-secundario">Voltar</button>
+          </div>
         </div>
       </div>
 
@@ -67,6 +148,7 @@
           <h2 id="fim-titulo">Uhuu! Você pintou a ilha! 🎉</h2>
           <p id="fim-texto">Que explorador incrível! A ilha está cheia de cor.</p>
           <ol id="fim-ranking" class="ranking" hidden></ol>
+          <p id="fim-espera" class="dica" hidden>Esperando o anfitrião começar outra partida…</p>
           <div class="botoes-fim">
             <button id="botao-jogar-de-novo" class="botao">Jogar de novo</button>
             <button id="botao-mudar-jogadores" class="botao botao-secundario">Mudar jogadores</button>
@@ -92,6 +174,19 @@
   <script src="js/ui.js"></script>
   <script src="js/ai.js"></script>
   <script src="js/setup.js"></script>
+  <!-- Online: biblioteca do Supabase (cópia local, versão fixa) + sala/sincronização -->
+  <script src="js/vendor/supabase-2.119.0.umd.js"></script>
+  <script src="js/online.js"></script>
   <script src="js/game.js"></script>
+  <script>
+    // Guarda o jogo em cache para abrir sem internet (só funciona servido por http/https).
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function (erro) {
+          console.warn('Service worker não registrado:', erro);
+        });
+      });
+    }
+  </script>
 </body>
 </html>

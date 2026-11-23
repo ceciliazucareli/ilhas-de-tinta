@@ -29,6 +29,21 @@ window.IlhasDeTinta = window.IlhasDeTinta || {};
     TEMPO_LIMITE: 120,    // segundos de partida no modo com vários jogadores
     MAX_JOGADORES: 4,
 
+    /* ---- ONLINE (Supabase Realtime: só Broadcast + Presence, sem banco) ----
+     * A chave publicável é pública por design (pode ficar no código do site).
+     * O anfitrião (quem cria a sala) simula a partida; os outros aparelhos só
+     * mandam mudanças de direção e desenham o que o anfitrião envia. */
+    ONLINE: {
+      SUPABASE_URL: 'https://grqjtgoflayhwuspiawc.supabase.co',
+      SUPABASE_CHAVE: 'sb_publishable_Ul_-ZY7Y7USJOj5fIJNHAQ_4VYB4Tnt',
+      PREFIXO_CODIGO: 'TINTA',      // códigos de sala do tipo TINTA-4821
+      ENVIOS_POR_SEGUNDO: 10,       // mensagens de estado do anfitrião por segundo
+      SNAPSHOT_A_CADA: 3,           // segundos entre fotos completas do mapa
+      TEMPO_CONEXAO: 8,             // segundos para desistir de conectar
+      TEMPO_PROCURAR_SALA: 4,       // segundos esperando o anfitrião aparecer
+      NIVEL_DE_QUEM_SAI: 'medio'    // quem sai no meio da partida vira CPU deste nível
+    },
+
     CORES: {
       gramaClara: '#b8ec8a',
       gramaEscura: '#a6e077',

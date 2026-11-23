@@ -2,11 +2,18 @@
  * game.js — liga tudo: cria a grade e os jogadores, roda o loop com
  * requestAnimationFrame e aplica as regras quando um explorador chega numa célula.
  *
- * Estados: 'configuracao' → 'jogando' → 'fim'
+ * Estados (telas): 'menu' → 'configuracao' → 'jogando' → 'fim'   (offline)
+ *                  'menu' → 'online' → 'sala' → 'jogando' → 'fim' (online)
  *   - "Jogar de novo" recomeça com a mesma configuração;
- *   - "Mudar jogadores" volta para a tela de configuração.
+ *   - "Mudar jogadores" volta para a configuração (ou para a sala, online).
  * Modos: 'solo' (1 jogador, meta de 80%, sem relógio) e 'multi' (2 a 4
  * jogadores, humanos e/ou CPU, com relógio e meta menor).
+ *
+ * Online (veja online.js): jogo.rede aponta para a conexão da sala.
+ *   - anfitrião: simula tudo normalmente; os ganchos aoAvisar/aoFim repassam
+ *     avisos e o fim para os outros aparelhos;
+ *   - cliente: NÃO simula; recebe o estado do anfitrião e só interpola o
+ *     movimento dos exploradores para ficar suave.
  */
 (function (IT) {
   'use strict';
@@ -19,7 +26,10 @@
   };
 
   var jogo = {
-    estado: 'configuracao',
+    estado: 'menu',
+    rede: null,        // conexão online (online.js) ou null no modo offline
+    aoAvisar: null,    // gancho: function (texto, tipo, idJogador)
+    aoFim: null,       // gancho: function (ranking, porTempo)
     modo: 'solo',
     configuracao: CONFIGURACAO_SOLO,
     grade: null,
@@ -39,7 +49,9 @@
     return [{ x: m, y: m }, { x: dir, y: baixo }, { x: dir, y: m }, { x: m, y: baixo }].slice(0, n);
   }
 
-  function novaPartida(configuracao) {
+  /* opcoes.semIA: no cliente online as CPUs são simuladas pelo anfitrião. */
+  function novaPartida(configuracao, opcoes) {
+    opcoes = opcoes || {};
     var vagas = configuracao.vagas;
     var n = vagas.length;
     var tam = C.TAMANHOS[n];
@@ -61,6 +73,8 @@
         cor: IT.CORES_JOGADORES[vaga.cor],
         tipo: vaga.tipo,         // 'humano' ou 'cpu'
         dificuldade: vaga.dificuldade,
+        cid: vaga.cid || null,   // online: identificação do aparelho deste humano
+        local: vaga.local !== false, // online: este humano joga neste aparelho?
         inicio: inicio,
         ultimoSeguro: { x: inicio.x, y: inicio.y },
         explorador: new IT.Explorador(inicio.x, inicio.y),
@@ -75,10 +89,12 @@
 
     // CPUs ganham um "cérebro" (ai.js) e a velocidade do nível escolhido.
     jogo.jogadores.forEach(function (j) {
-      if (j.tipo === 'cpu' && IT.ia) {
+      if (j.tipo === 'cpu') {
         j.explorador.velocidade = IT.DIFICULDADES[j.dificuldade].velocidade;
-        j.ia = IT.ia.criar(j, jogo);
-        j.explorador.controlador = j.ia;
+        if (IT.ia && !opcoes.semIA) {
+          j.ia = IT.ia.criar(j, jogo);
+          j.explorador.controlador = j.ia;
+        }
       }
     });
 
@@ -165,6 +181,17 @@
   /* Balão de mensagem; no multi o texto sai na cor do jogador envolvido. */
   function avisar(texto, tipo, j) {
     IT.ui.mostrarMensagem(texto, tipo, jogo.modo === 'multi' && j ? j.cor.escura : null);
+    if (jogo.aoAvisar) jogo.aoAvisar(texto, tipo, j ? j.id : 0);
+  }
+
+  /* Online: quem saiu da sala no meio da partida passa a ser jogado pela CPU. */
+  function transformarEmCPU(j, dificuldade) {
+    j.tipo = 'cpu';
+    j.dificuldade = dificuldade || 'medio';
+    j.local = true;
+    j.explorador.velocidade = IT.DIFICULDADES[j.dificuldade].velocidade;
+    j.ia = IT.ia.criar(j, jogo);
+    j.explorador.controlador = j.ia;
   }
 
   /* Ninguém é eliminado: quem perdeu todo o território ganha uma ilhinha nova. */
@@ -207,26 +234,53 @@
       j.explorador.teleportar(j.explorador.x, j.explorador.y);
     });
     IT.ui.esconderMensagem();
-    IT.ui.mostrarFim(jogo, ranking(), acabouTempo && !atingiuMeta);
+    var lista = ranking();
+    IT.ui.mostrarFim(jogo, lista, acabouTempo && !atingiuMeta);
     IT.renderer.soltarConfete();
+    if (jogo.aoFim) jogo.aoFim(lista, acabouTempo && !atingiuMeta);
     return true;
+  }
+
+  /* Cliente online: o anfitrião avisou o fim e mandou o ranking ([id, celulas]). */
+  function mostrarFimRemoto(pares, porTempo) {
+    jogo.estado = 'fim';
+    var lista = pares.map(function (p) {
+      var j = jogadorPorId(p[0]);
+      return { jogador: j, celulas: p[1], fracao: p[1] / jogo.grade.total };
+    });
+    jogo.jogadores.forEach(function (j) { j.explorador.teleportar(j.explorador.x, j.explorador.y); });
+    IT.ui.esconderMensagem();
+    IT.ui.mostrarFim(jogo, lista, porTempo);
+    IT.renderer.soltarConfete();
   }
 
   /* ---------- Fluxo de telas ---------- */
 
   /* Começa (ou recomeça) uma partida com a configuração dada. */
-  function jogar(configuracao) {
-    novaPartida(configuracao || jogo.configuracao);
+  function jogar(configuracao, opcoes) {
+    novaPartida(configuracao || jogo.configuracao, opcoes);
     jogo.estado = 'jogando';
     IT.ui.esconderMensagem();
+    IT.ui.configurarFim(!jogo.rede ? 'offline' : jogo.rede.anfitriao ? 'anfitriao' : 'cliente');
     IT.ui.prepararPartida(jogo);
     IT.ui.atualizarHUD(jogo);
     IT.ui.mostrarEstado('jogando');
   }
 
   function mudarJogadores() {
-    jogo.estado = 'configuracao';
-    IT.ui.mostrarEstado('configuracao');
+    if (jogo.rede) { jogo.rede.mudarJogadores(); return; }
+    irPara('configuracao');
+  }
+
+  function jogarDeNovo() {
+    if (jogo.rede) { jogo.rede.jogarDeNovo(); return; }
+    jogar();
+  }
+
+  /* Troca de tela fora da partida ('menu', 'configuracao', 'online', 'sala'). */
+  function irPara(estado) {
+    jogo.estado = estado;
+    IT.ui.mostrarEstado(estado);
   }
 
   /*
@@ -237,6 +291,11 @@
    */
   function direcionar(esquema, direcao) {
     if (jogo.estado !== 'jogando') return false;
+    if (jogo.rede) {
+      // Online: cada aparelho controla só o próprio explorador (WASD, setas ou toque).
+      if (esquema !== 0 && esquema !== 1 && esquema !== 'toque') return false;
+      return jogo.rede.direcionar(direcao);
+    }
     var humanos = jogo.jogadores.filter(function (j) { return j.tipo === 'humano'; });
     var alvo = null;
     if (humanos.length === 1) {
@@ -253,13 +312,15 @@
 
   /* Enter/Espaço: confirma a tela atual. */
   function confirmar() {
-    if (jogo.estado === 'jogando') return false;
     if (jogo.estado === 'configuracao') {
       jogar(IT.setup ? IT.setup.configuracao() : CONFIGURACAO_SOLO);
-    } else {
-      jogar();
+      return true;
     }
-    return true;
+    if (jogo.estado === 'fim' && (!jogo.rede || jogo.rede.anfitriao)) {
+      jogarDeNovo();
+      return true;
+    }
+    return false; // menu, telas online e partida: os botões cuidam disso
   }
 
   /* ---------- Loop ---------- */
@@ -270,6 +331,7 @@
   function passo(dt) {
     jogo.ultimoTempo += dt;
     if (jogo.estado !== 'jogando') return;
+    if (jogo.rede && !jogo.rede.anfitriao) { interpolar(dt); return; }
     for (var i = 0; i < jogo.jogadores.length && jogo.estado === 'jogando'; i++) {
       var j = jogo.jogadores[i];
       j.explorador.atualizar(dt, jogo.grade, j.aoChegar);
@@ -283,6 +345,18 @@
       }
       verificarFim();
     }
+  }
+
+  /*
+   * Cliente online: entre uma mensagem e outra do anfitrião, cada explorador
+   * continua andando até o fim da célula em que está (sem passar dela). A
+   * próxima mensagem corrige a posição.
+   */
+  function interpolar(dt) {
+    jogo.jogadores.forEach(function (j) {
+      var e = j.explorador;
+      if (e.direcao) e.progresso = Math.min(1, e.progresso + dt * C.VELOCIDADE * e.velocidade);
+    });
   }
 
   var relogioAnterior = 0;
@@ -301,19 +375,27 @@
     novaPartida(CONFIGURACAO_SOLO); // mapa de fundo atrás da tela de configuração
     IT.ui.iniciar({
       aoJogar: function () { jogar(IT.setup ? IT.setup.configuracao() : CONFIGURACAO_SOLO); },
-      aoJogarDeNovo: function () { jogar(); },
-      aoMudarJogadores: mudarJogadores
+      aoJogarDeNovo: jogarDeNovo,
+      aoMudarJogadores: mudarJogadores,
+      aoOffline: function () { irPara('configuracao'); },
+      aoOnline: function () { if (IT.online) IT.online.abrir(); },
+      aoVoltarMenu: function () { irPara('menu'); }
     });
     if (IT.setup) IT.setup.iniciar();
+    if (IT.online) IT.online.iniciar();
     IT.ui.prepararPartida(jogo);
     IT.ui.atualizarHUD(jogo);
-    IT.ui.mostrarEstado('configuracao');
+    IT.ui.mostrarEstado('menu');
     IT.input.iniciar(direcionar, confirmar);
     requestAnimationFrame(quadro);
   });
 
   // Exposto para depuração e testes no console.
   jogo.jogar = jogar;
+  jogo.irPara = irPara;
+  jogo.mostrarFimRemoto = mostrarFimRemoto;
+  jogo.transformarEmCPU = transformarEmCPU;
+  jogo.jogadorPorId = jogadorPorId;
   jogo.passo = passo; // usado por tests/simulacao.html para acelerar partidas
   jogo.ranking = ranking;
   IT.jogo = jogo;

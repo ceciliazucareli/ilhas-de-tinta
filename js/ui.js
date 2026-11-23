@@ -12,6 +12,15 @@
 
   function $(id) { return document.getElementById(id); }
 
+  /* Telas por cima do mapa e o botão que recebe o foco em cada uma. */
+  var TELAS = {
+    menu: { id: 'tela-menu', foco: 'botao-offline' },
+    configuracao: { id: 'tela-configuracao', foco: 'botao-jogar' },
+    online: { id: 'tela-online', foco: 'online-nome' },
+    sala: { id: 'tela-sala', foco: 'sala-jogar' },
+    fim: { id: 'tela-fim', foco: 'botao-jogar-de-novo' }
+  };
+
   function porcento(fracao) { return Math.floor(fracao * 100) + '%'; }
 
   function formatarTempo(segundos) {
@@ -41,9 +50,16 @@
       el.fimRanking = $('fim-ranking');
       el.controlesToque = $('controles-toque');
 
+      el.fimEspera = $('fim-espera');
+      el.botaoJogarDeNovo = $('botao-jogar-de-novo');
+      el.botaoMudarJogadores = $('botao-mudar-jogadores');
+
       $('botao-jogar').addEventListener('click', callbacks.aoJogar);
-      $('botao-jogar-de-novo').addEventListener('click', callbacks.aoJogarDeNovo);
-      $('botao-mudar-jogadores').addEventListener('click', callbacks.aoMudarJogadores);
+      el.botaoJogarDeNovo.addEventListener('click', callbacks.aoJogarDeNovo);
+      el.botaoMudarJogadores.addEventListener('click', callbacks.aoMudarJogadores);
+      $('botao-offline').addEventListener('click', callbacks.aoOffline);
+      $('botao-online').addEventListener('click', callbacks.aoOnline);
+      $('botao-config-voltar').addEventListener('click', callbacks.aoVoltarMenu);
     },
 
     /* Monta o HUD certo para o modo da partida (solo ou multi). */
@@ -100,14 +116,28 @@
       el.relogio.classList.toggle('acabando', segundos <= 15);
     },
 
-    /* Mostra só a tela do estado atual: 'configuracao', 'jogando' ou 'fim'. */
+    /*
+     * Mostra só a tela do estado atual:
+     * 'menu', 'configuracao', 'online', 'sala', 'jogando' (nenhuma) ou 'fim'.
+     */
     mostrarEstado: function (estado) {
-      el.telaConfiguracao.hidden = estado !== 'configuracao';
-      el.telaFim.hidden = estado !== 'fim';
-      var foco = estado === 'configuracao' ? $('botao-jogar')
-        : estado === 'fim' ? $('botao-jogar-de-novo') : null;
-      if (foco) foco.focus();
+      var foco = null;
+      Object.keys(TELAS).forEach(function (nome) {
+        var tela = $(TELAS[nome].id);
+        tela.hidden = nome !== estado;
+        if (nome === estado) foco = $(TELAS[nome].foco);
+      });
+      if (foco && !foco.hidden && !foco.disabled) foco.focus();
       if (estado === 'jogando' && document.activeElement) document.activeElement.blur();
+    },
+
+    /* Botões da tela de fim: 'offline', 'anfitriao' ou 'cliente' (online). */
+    configurarFim: function (papel) {
+      var cliente = papel === 'cliente';
+      el.botaoJogarDeNovo.hidden = cliente;
+      el.fimEspera.hidden = !cliente;
+      el.botaoMudarJogadores.textContent = papel === 'offline' ? 'Mudar jogadores'
+        : papel === 'anfitriao' ? 'Voltar para a sala' : 'Sair da sala';
     },
 
     /* Tela de fim: comemoração no solo; ranking colorido com vários jogadores. */

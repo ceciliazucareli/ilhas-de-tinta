@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Teste online — Ilhas de Tinta</title>
+  <style>
+    body { font-family: monospace; padding: 12px; margin: 0; }
+    .janelas { display: flex; flex-wrap: wrap; gap: 8px; }
+    iframe { width: 640px; height: 560px; border: 2px solid #ccc; }
+    .passou { background: #eaffea; }
+    .falhou { background: #ffeaea; }
+  </style>
+</head>
+<body>
+  <!--
+    Teste de ponta a ponta do modo online, usando o Supabase de verdade.
+    Cada janelinha (iframe) é um aparelho diferente com o jogo inteiro.
+
+    Precisa de internet e do servidor local:
+      python3 -m http.server   →   http://localhost:8000/tests/online.html
+    Opções: ?jogadores=4 (4 humanos online)   ?tempo=25 (segundos de partida)
+
+    Roteiro: o J1 cria a sala, os outros entram com o código, alguém troca de
+    cor, o anfitrião completa com CPU (com 2 jogadores) e aperta Jogar; todos
+    apertam teclas ao acaso até o ranking; confere que o ranking é igual em
+    todas as janelas; "Jogar de novo"; (com 4) um cliente sai no meio da
+    partida e vira CPU; por fim o anfitrião sai e os outros voltam ao menu.
+  -->
+  <h1>Teste online (Supabase de verdade)</h1>
+  <pre id="saida">rodando…</pre>
+  <div id="janelas" class="janelas"></div>
+  <script>
+  (function () {
+    'use strict';
+    var params = new URLSearchParams(location.search);
+    var N = Math.max(2, Math.min(4, +(params.get('jogadores') || 2)));
+    var TEMPO = +(params.get('tempo') || 25);
+    var NOMES = ['Ana', 'Beto', 'Caio', 'Duda'];
+    var saida = [], falhas = 0, erros = [];
+    var t0 = Date.now();
+    function log(t) {
+      saida.push(((Date.now() - t0) / 1000).toFixed(1).padStart(5) + 's ' + t);
+      document.getElementById('saida').textContent = saida.join('\n');
+    }
+    function verificar(ok, texto) { if (!ok) falhas++; log((ok ? 'ok   - ' : 'FALHA - ') + texto); return ok; }
+    function esperar(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    function ate(cond, limite, nome) {
+      var inicio = Date.now();
+      return new Promise(function (resolver, rejeitar) {
+        (function checar() {
+          var v; try { v = cond(); } catch (e) { v = false; }
+          if (v) return resolver(v);
+          if (Date.now() - inicio > limite) return rejeitar(new Error('tempo esgotado: ' + nome));
+          setTimeout(checar, 100);
+        })();
+      });
+    }
+
+    // Cria as janelas.
+    var janelas = [];
+    for (var i = 0; i < N; i++) {
+      var f = document.createElement('iframe');
+      f.src = '../index.html';
+      f.title = NOMES[i];
+      document.getElementById('janelas').appendChild(f);
+      janelas.push(f);
+    }
+    var carregadas = janelas.map(function (f) {
+      return new Promise(function (r) { f.addEventListener('load', r); });
+    });
+
+    function W(i) { return janelas[i].contentWindow; }
+    function IT(i) { return W(i).IlhasDeTinta; }
+    function doc(i) { return W(i).document; }
+    function clicar(i, id) { doc(i).getElementById(id).click(); }
+    function escrever(i, id, texto) { doc(i).getElementById(id).value = texto; }
+    function tecla(i, code) {
+      var Evento = W(i).KeyboardEvent;
+      W(i).dispatchEvent(new Evento('keydown', { code: code, bubbles: true }));
+    }
+    function estado(i) { return IT(i).jogo.estado; }
+    function rankingTexto(i) { return doc(i).getElementById('fim-ranking').innerText.replace(/\s+/g, ' ').trim(); }
+
+    Promise.all(carregadas).then(function () {
+      janelas.forEach(function (f, i) {
+        var w = f.contentWindow;
+        w.addEventListener('error', function (e) { erros.push(NOMES[i] + ': ' + e.message); });
+        var original = w.console.error;
+        w.console.error = function () {
+          erros.push(NOMES[i] + ': ' + Array.prototype.join.call(arguments, ' '));
+          return original.apply(w.console, arguments);
+        };
+      });
+      return roteiro();
+    }).catch(function (erro) {
+      verificar(false, 'roteiro interrompido: ' + erro.message);
+    }).then(terminar);
+
+    function roteiro() {
+      var codigo;
+      // 1) Ana cria a sala.
+      IT(0).config.TEMPO_LIMITE = TEMPO;
+      clicar(0, 'botao-online');
+      escrever(0, 'online-nome', NOMES[0]);
+      clicar(0, 'online-criar');
+      return ate(function () { return estado(0) === 'sala'; }, 15000, 'criar sala').then(function () {
+        codigo = doc(0).getElementById('sala-codigo').textContent;
+        verificar(/^TINTA-\d{4}$/.test(codigo), 'sala criada com código ' + codigo);
+
+        // 2) Os outros entram com o código (digitado sem traço, como uma criança faria).
+        var entradas = [];
+        for (var i = 1; i < N; i++) {
+          clicar(i, 'botao-online');
+          escrever(i, 'online-nome', NOMES[i]);
+          escrever(i, 'online-codigo', codigo.replace('-', ' ').toLowerCase());
+          clicar(i, 'online-entrar');
+          entradas.push(i);
+        }
+        return ate(function () {
+          return entradas.every(function (i) { return estado(i) === 'sala'; }) &&
+            IT(0).online.conexao().sala.membros.length === N;
+        }, 20000, 'todos entrarem');
+      }).then(function () {
+        verificar(true, 'todos entraram na sala (' + N + ' jogadores, Presence)');
+        return ate(function () {
+          var lista = doc(N - 1).getElementById('sala-jogadores').innerText;
+          return NOMES.slice(0, N).every(function (n) { return lista.indexOf(n) !== -1; });
+        }, 8000, 'lista da sala no cliente').then(function () {
+          verificar(true, 'a lista da sala mostra todos os nomes no último cliente');
+        });
+      }).then(function () {
+        var cores = IT(0).online.conexao().sala.membros.map(function (m) { return m.cor; });
+        verificar(cores.every(function (c, i) { return cores.indexOf(c) === i; }), 'cores sem repetir: ' + cores.join(', '));
+        if (N === 4) return null; // com 4 jogadores não sobra cor livre para trocar
+
+        // 3) Beto troca para amarelo (cor livre).
+        var botoes = doc(1).querySelectorAll('#sala-cores .cor-opcao');
+        var amarelo = Array.prototype.filter.call(botoes, function (b) { return b.title.indexOf('Amarelo') === 0; })[0];
+        if (amarelo.disabled) {
+          amarelo = Array.prototype.filter.call(botoes, function (b) { return !b.disabled && b.getAttribute('aria-pressed') !== 'true'; })[0];
+        }
+        var corDesejada = amarelo.title.split(' ')[0].toLowerCase();
+        amarelo.click();
+        return ate(function () {
+          var m = IT(0).online.conexao().sala.membros[1];
+          return m && IT(0).CORES_JOGADORES[m.cor].nome.toLowerCase() === corDesejada;
+        }, 8000, 'troca de cor').then(function () { verificar(true, 'Beto trocou de cor para ' + corDesejada); });
+      }).then(function () {
+        // 4) Com 2 humanos o anfitrião completa com 1 CPU Fácil.
+        if (N === 2) {
+          doc(0).querySelectorAll('#sala-cpus .opcao')[1].click();
+          doc(0).querySelectorAll('#sala-nivel .opcao')[0].click();
+        }
+        clicar(0, 'sala-jogar');
+        return ate(function () {
+          return janelas.every(function (f, i) { return estado(i) === 'jogando'; });
+        }, 10000, 'partida começar');
+      }).then(function () {
+        var total = IT(0).jogo.jogadores.length;
+        verificar(total === (N === 2 ? 3 : N), 'partida começou em todas as janelas com ' + total + ' exploradores');
+        return jogarAteOFim('1ª partida');
+      }).then(function () {
+        // 6) Jogar de novo.
+        clicar(0, 'botao-jogar-de-novo');
+        return ate(function () {
+          return janelas.every(function (f, i) { return estado(i) === 'jogando'; });
+        }, 10000, 'jogar de novo').then(function () { verificar(true, '"Jogar de novo" recomeçou em todas as janelas'); });
+      }).then(function () {
+        if (N < 4) return esperar(4000);
+        // 7) Com 4: Duda sai no meio da partida e vira CPU.
+        return esperar(3000).then(function () {
+          IT(3).online.sair();
+          return ate(function () {
+            var d = IT(0).jogo.jogadores.filter(function (j) { return j.nome === NOMES[3]; })[0];
+            return d && d.tipo === 'cpu';
+          }, 10000, 'quem saiu virar CPU');
+        }).then(function () { verificar(true, 'Duda saiu no meio da partida e virou CPU no anfitrião'); });
+      }).then(function () {
+        // 8) O anfitrião sai: os outros voltam ao menu com aviso.
+        IT(0).online.sair();
+        var restantes = [];
+        for (var i = 1; i < N; i++) if (!(N === 4 && i === 3)) restantes.push(i);
+        return ate(function () {
+          return restantes.every(function (i) { return estado(i) === 'menu'; });
+        }, 15000, 'clientes voltarem ao menu').then(function () {
+          var aviso = doc(1).getElementById('menu-aviso').textContent;
+          verificar(/anfitrião saiu/.test(aviso), 'anfitrião saiu → clientes voltaram ao menu com aviso: "' + aviso + '"');
+        });
+      });
+    }
+
+    /* Todos apertam setas/WASD ao acaso até o ranking aparecer em todas as janelas. */
+    function jogarAteOFim(nome) {
+      var codigos = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD'];
+      var meio = false;
+      var teclas = setInterval(function () {
+        janelas.forEach(function (f, i) { if (estado(i) === 'jogando') tecla(i, codigos[Math.floor(Math.random() * 8)]); });
+        // No meio da partida, confere se o mapa do cliente bate com o do anfitrião.
+        if (!meio && IT(0).jogo.tempoRestante < TEMPO / 2) {
+          meio = true;
+          setTimeout(function () {
+            var a = IT(0).jogo.grade, b = IT(1).jogo.grade, dif = 0;
+            for (var k = 0; k < a.total; k++) if (a.donos[k] !== b.donos[k]) dif++;
+            verificar(dif <= a.total * 0.02, nome + ': mapa do cliente igual ao do anfitrião (diferença de ' + dif + ' células de ' + a.total + ')');
+            var p0 = IT(0).jogo.jogadores[0].explorador, p1 = IT(1).jogo.jogadores[0].explorador;
+            verificar(Math.abs(p0.x - p1.x) + Math.abs(p0.y - p1.y) <= 2, nome + ': posição do anfitrião igual nas duas janelas');
+          }, 0);
+        }
+      }, 350);
+      return ate(function () {
+        return janelas.every(function (f, i) { return estado(i) === 'fim'; });
+      }, (TEMPO + 25) * 1000, 'ranking').then(function () {
+        clearInterval(teclas);
+        var r0 = rankingTexto(0);
+        verificar(true, nome + ': ranking apareceu em todas as janelas: ' + r0);
+        for (var i = 1; i < N; i++) verificar(rankingTexto(i) === r0, nome + ': ranking igual na janela de ' + NOMES[i]);
+        verificar(doc(1).getElementById('botao-jogar-de-novo').hidden &&
+          !doc(1).getElementById('fim-espera').hidden, nome + ': cliente vê "Esperando o anfitrião…"');
+      }, function (e) { clearInterval(teclas); throw e; });
+    }
+
+    function terminar() {
+      if (erros.length) { falhas++; log('ERROS NO CONSOLE:\n' + erros.join('\n')); }
+      else log('ok   - nenhum erro no console das janelas');
+      log(falhas ? falhas + ' falha(s)' : 'Teste online passou.');
+      window.resultadoOnline = { falhas: falhas, texto: saida.join('\n') };
+      document.body.className = falhas ? 'falhou' : 'passou';
+      document.title = 'FIM ' + (falhas ? 'FALHOU' : 'OK');
+    }
+  })();
+  </script>
+</body>
+</html>
