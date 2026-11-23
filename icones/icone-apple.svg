@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Versão para iPhone: quadrado opaco (o iOS arredonda os cantos sozinho) -->
+  <rect width="512" height="512" fill="#7ccfff"/>
+  <g transform="translate(36 36) scale(0.86)">
+  <ellipse cx="150" cy="110" rx="70" ry="26" fill="#fff" opacity="0.9"/>
+  <ellipse cx="370" cy="80" rx="50" ry="18" fill="#fff" opacity="0.8"/>
+  <path d="M110 330 L170 430 L256 460 L340 430 L402 330 Z" fill="#a87a50"/>
+  <rect x="86" y="300" width="340" height="50" rx="24" fill="#c99a6b"/>
+  <rect x="80" y="196" width="352" height="128" rx="40" fill="#7cc35a"/>
+  <rect x="96" y="206" width="320" height="104" rx="32" fill="#b8ec8a"/>
+  <path d="M150 300 C130 250 180 215 230 225 C280 200 350 230 340 275 C360 300 300 312 256 304 C210 316 160 318 150 300 Z" fill="#ff7eb6"/>
+  <circle cx="352" cy="214" r="34" fill="#ffd9b3" stroke="#d9a173" stroke-width="6"/>
+  <ellipse cx="352" cy="190" rx="52" ry="15" fill="#e8b04a"/>
+  <path d="M322 190 A30 26 0 0 1 382 190 Z" fill="#e8b04a"/>
+  <rect x="324" y="182" width="56" height="7" fill="#e2589a"/>
+  <circle cx="342" cy="218" r="4" fill="#3b2a20"/>
+  <circle cx="362" cy="218" r="4" fill="#3b2a20"/>
+</g>
+</svg>

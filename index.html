@@ -11,7 +11,8 @@
   <meta name="theme-color" content="#7ccfff">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icones/icone.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icones/icone-192.png">
+  <link rel="apple-touch-icon" href="icones/icone-apple-180.png">
+  <meta name="apple-mobile-web-app-title" content="Ilhas de Tinta">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -93,6 +94,12 @@
             </button>
           </div>
           <p id="menu-aviso" class="aviso-online" role="status" aria-live="polite"></p>
+          <!-- Instalar como app (aparece só quando dá para instalar e ainda não está instalado) -->
+          <button id="botao-instalar" class="botao botao-secundario" hidden>📲 Instalar o jogo</button>
+          <p id="dica-instalar-ios" class="dica dica-instalar" hidden>
+            📲 Para instalar no iPhone/iPad: toque em <b>Compartilhar</b>
+            <span aria-hidden="true">(⬆️)</span> e depois em <b>Adicionar à Tela de Início</b>.
+          </p>
         </div>
       </div>
 
@@ -214,16 +221,7 @@
   <!-- Online: biblioteca do Supabase (cópia local, versão fixa) + sala/sincronização -->
   <script src="js/vendor/supabase-2.119.0.umd.js"></script>
   <script src="js/online.js"></script>
+  <script src="js/instalar.js"></script>
   <script src="js/game.js"></script>
-  <script>
-    // Guarda o jogo em cache para abrir sem internet (só funciona servido por http/https).
-    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('sw.js').catch(function (erro) {
-          console.warn('Service worker não registrado:', erro);
-        });
-      });
-    }
-  </script>
 </body>
 </html>

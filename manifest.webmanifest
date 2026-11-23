@@ -1,18 +1,31 @@
 {
+  "id": "/",
   "name": "Ilhas de Tinta",
   "short_name": "Ilhas de Tinta",
-  "description": "Jogo infantil de pintar a ilha: conquiste território com seu explorador.",
+  "description": "Jogo infantil de pintar a ilha: saia de casa, dê uma volta e conquiste território. Sozinho, contra a CPU ou online com amigos.",
   "lang": "pt-BR",
+  "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["fullscreen", "standalone"],
   "orientation": "any",
   "background_color": "#c7ecff",
   "theme_color": "#7ccfff",
+  "categories": ["games", "kids", "entertainment"],
   "icons": [
-    { "src": "icones/icone-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icones/icone-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icones/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "icones/icone.svg", "sizes": "any", "type": "image/svg+xml" }
+    { "src": "icones/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icones/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icones/icone-mascaravel-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icones/icone-mascaravel-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icones/icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "screenshots": [
+    { "src": "icones/tela-celular.png", "sizes": "540x1170", "type": "image/png", "form_factor": "narrow", "label": "Partida no celular: deslize o dedo para pintar a ilha" },
+    { "src": "icones/tela-computador.png", "sizes": "1280x720", "type": "image/png", "form_factor": "wide", "label": "Partida com 4 jogadores no computador" }
+  ],
+  "shortcuts": [
+    { "name": "Jogar Offline", "short_name": "Offline", "url": "./?abrir=offline", "icons": [{ "src": "icones/icone-192.png", "sizes": "192x192" }] },
+    { "name": "Jogar Online", "short_name": "Online", "url": "./?abrir=online", "icons": [{ "src": "icones/icone-192.png", "sizes": "192x192" }] }
   ]
 }

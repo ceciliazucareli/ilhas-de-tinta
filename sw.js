@@ -9,7 +9,7 @@
  * Estratégia: "cache primeiro". O modo Online continua precisando de internet
  * (as conexões com o Supabase não passam pelo cache).
  */
-var VERSAO = 'ilhas-de-tinta-v2';
+var VERSAO = 'ilhas-de-tinta-v3';
 
 var ARQUIVOS = [
   './',
@@ -26,10 +26,14 @@ var ARQUIVOS = [
   'js/setup.js',
   'js/vendor/supabase-2.119.0.umd.js',
   'js/online.js',
+  'js/instalar.js',
   'js/game.js',
   'icones/icone.svg',
   'icones/icone-192.png',
-  'icones/icone-512.png'
+  'icones/icone-512.png',
+  'icones/icone-mascaravel-192.png',
+  'icones/icone-mascaravel-512.png',
+  'icones/icone-apple-180.png'
 ];
 
 self.addEventListener('install', function (evento) {

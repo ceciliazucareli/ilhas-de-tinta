@@ -486,6 +486,7 @@
     IT.ui.prepararPartida(jogo);
     IT.ui.atualizarHUD(jogo);
     IT.ui.mostrarEstado('menu');
+    if (IT.instalar) IT.instalar.iniciar(); // botão "Instalar", atualização e atalhos do app
     IT.input.iniciar(direcionar, confirmar, function () { IT.ui.esconderDica(); });
     window.addEventListener('keydown', function (e) {
       if (e.code === 'Escape' || e.code === 'KeyP') {

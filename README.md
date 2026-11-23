@@ -150,6 +150,27 @@ umas **2 salas cheias (4 jogadores) ao mesmo tempo**, ou umas 5 salas de 2.
 Para caber mais salas, diminua `ENVIOS_POR_SEGUNDO` em `js/config.js` (fica um
 pouco menos suave) ou mude de plano.
 
+## Instalar como app
+
+O jogo é um **web app instalável (PWA)**: depois de instalado, abre pelo ícone,
+em tela cheia, sem a barra do navegador, e funciona offline.
+
+- **Android / Chrome / Edge (inclusive no computador):** no menu aparece o
+  botão **📲 Instalar o jogo** quando o navegador permite. (Também dá pelo menu
+  do navegador: "Instalar app" / "Adicionar à tela inicial".)
+- **iPhone / iPad (Safari):** o menu mostra a dica: toque em **Compartilhar**
+  e depois em **Adicionar à Tela de Início**.
+- Já instalado, o botão e a dica somem, e o botão ⛶ também (o app já abre em
+  tela cheia).
+- Segurando o ícone no Android aparecem os atalhos **Jogar Offline** e
+  **Jogar Online**.
+- **Atualizações chegam sozinhas:** o app procura versão nova ao ser aberto e
+  de hora em hora. Quando chega, ele recarrega **só quando é seguro** (no menu,
+  fora de partida e fora de sala online), nunca no meio do jogo.
+- Ícones: `icones/icone-*.png` (normal), `icone-mascaravel-*.png` (Android
+  recorta em círculo) e `icone-apple-180.png` (iPhone). As imagens
+  `icones/tela-*.png` aparecem na janela de instalação do Android.
+
 ## Funcionar sem internet
 
 Quando o jogo é aberto por um endereço http/https, o `sw.js` (service worker)
@@ -273,6 +294,7 @@ js/vendor/            supabase-js 2.119.0 (cópia local, versão fixa)
 sw.js                 service worker (cache para funcionar sem internet)
 manifest.webmanifest  dados para instalar o jogo como aplicativo
 icones/               ícones do jogo (SVG e PNG)
+js/instalar.js        instalar como app (botão, dica do iPhone, atalhos, atualização)
 vercel.json           cabeçalhos de cache para a hospedagem
 js/game.js            loop (requestAnimationFrame), regras e estados:
                       menu → configuração/online/sala → jogando → fim
@@ -314,6 +336,9 @@ rastro (`Grade.capturar(N)` em `js/grid.js`):
   mapa e o ranking são iguais em todas as janelas), "Jogar de novo", um
   jogador saindo no meio (vira CPU) e o anfitrião saindo (todos voltam ao menu).
 
+- `tests/celular/teste_instalar.py` — confere que o Chrome considera o site
+  instalável, o botão Instalar, a dica do iPhone, o modo instalado, os atalhos
+  e a atualização segura (só recarrega fora da partida).
 - `tests/celular/` — testes com **toque de verdade** no Chrome headless
   (celular emulado, `Input.dispatchTouchEvent`) e uma partida online real
   **celular × desktop** trocando quem é o anfitrião. Precisa de `python3` e

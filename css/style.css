@@ -339,6 +339,11 @@ canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%
   text-decoration: underline; cursor: pointer; min-height: 44px;
 }
 
+/* Instalar como app. Já instalado: o app abre em tela cheia, sem o botão ⛶. */
+.dica-instalar { margin-top: 12px; }
+.dica-instalar[hidden], #botao-instalar[hidden] { display: none; }
+body.instalado #botao-tela-cheia { display: none; }
+
 /* ---------- Dica do começo, avisos e pausa ---------- */
 .dica-inicio {
   position: absolute; left: 50%; bottom: 18%; z-index: 4;
