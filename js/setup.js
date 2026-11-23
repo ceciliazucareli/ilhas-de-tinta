@@ -85,10 +85,61 @@
     return div;
   }
 
+  /*
+   * Modo simples (celular/tablet): "Só eu" ou "Contra a CPU", nível e cor.
+   * Vários jogadores no mesmo aparelho ficam em "Mais opções" (pensado para
+   * teclado de computador).
+   */
+  var simples = false;
+  var cpusSimples = 1;
+
+  function desenharSimples() {
+    el.titulo.textContent = 'Com quem você quer jogar?';
+    el.quantidade.innerHTML = '';
+    [[0, '🙂 Só eu'], [1, '🤖 Contra 1 CPU'], [3, '🤖🤖🤖 Contra 3']].forEach(function (op) {
+      var b = botao(op[1], 'opcao opcao-simples', cpusSimples === op[0], 'simples' + op[0], function () {
+        cpusSimples = op[0];
+        desenhar();
+      });
+      el.quantidade.appendChild(b);
+    });
+
+    el.vagas.innerHTML = '';
+    var li = document.createElement('li');
+    li.className = 'vaga vaga-simples';
+    var cores = IT.CORES_JOGADORES[vagas[0].cor];
+    li.style.setProperty('--cor', cores.tinta);
+    li.style.setProperty('--cor-escura', cores.escura);
+    if (cpusSimples > 0) {
+      var nivel = linha('Nível');
+      Object.keys(IT.DIFICULDADES).forEach(function (chave) {
+        nivel.appendChild(botao(IT.DIFICULDADES[chave].nome, 'opcao', vagas[1].dificuldade === chave,
+          'nivelS' + chave, function () { vagas[1].dificuldade = chave; desenhar(); }));
+      });
+      li.appendChild(nivel);
+    }
+    var linhaCor = linha('Sua cor');
+    IT.ORDEM_CORES.forEach(function (cor) {
+      var b = botao('', 'cor-opcao', vagas[0].cor === cor, 'corS' + cor, function () { escolherCor(0, cor); desenhar(); });
+      b.style.background = IT.CORES_JOGADORES[cor].tinta;
+      b.setAttribute('aria-label', 'Cor ' + IT.CORES_JOGADORES[cor].nome);
+      linhaCor.appendChild(b);
+    });
+    li.appendChild(linhaCor);
+    var mais = botao('Mais opções (vários no mesmo teclado)', 'link-opcoes', false, 'mais', function () {
+      simples = false;
+      desenhar();
+    });
+    li.appendChild(mais);
+    el.vagas.appendChild(li);
+  }
+
   /* Redesenha a tela, devolvendo o foco ao controle que estava focado. */
   function desenhar() {
     var focado = document.activeElement && document.activeElement.dataset
       ? document.activeElement.dataset.foco : null;
+    if (simples) { desenharSimples(); return; }
+    el.titulo.textContent = 'Quantos jogadores?';
 
     // Botões 1, 2, 3, 4.
     el.quantidade.innerHTML = '';
@@ -188,15 +239,35 @@
   }
 
   IT.setup = {
+    /* Usado nos testes: liga/desliga o modo simples. */
+    modoSimples: function (sim, cpus) {
+      simples = !!sim;
+      if (typeof cpus === 'number') cpusSimples = cpus;
+      desenhar();
+    },
+
     iniciar: function () {
       el.quantidade = document.getElementById('setup-quantidade');
       el.vagas = document.getElementById('setup-vagas');
+      el.titulo = document.getElementById('setup-titulo');
+      // No celular/tablet começa no modo simples.
+      simples = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
       desenhar();
     },
 
     /* Configuração escolhida, no formato que o game.js usa. */
     configuracao: function () {
       var lista = [];
+      if (simples) {
+        lista.push({ tipo: 'humano', cor: vagas[0].cor, nome: 'Você', dificuldade: 'medio' });
+        var outras = IT.ORDEM_CORES.filter(function (c) { return c !== vagas[0].cor; });
+        for (var k = 0; k < cpusSimples; k++) {
+          var nomeNivel = IT.DIFICULDADES[vagas[1].dificuldade].nome;
+          lista.push({ tipo: 'cpu', cor: outras[k], dificuldade: vagas[1].dificuldade,
+            nome: cpusSimples > 1 ? 'CPU ' + (k + 1) : 'CPU ' + nomeNivel });
+        }
+        return { vagas: lista };
+      }
       for (var i = 0; i < quantidade; i++) {
         lista.push({
           tipo: tipoEfetivo(i),
@@ -210,6 +281,7 @@
 
     /* Usado nos testes: escolhe a quantidade e altera vagas. */
     definir: function (n, alteracoes) {
+      simples = false;
       quantidade = n;
       (alteracoes || []).forEach(function (a, i) {
         if (a) Object.keys(a).forEach(function (k) { vagas[i][k] = a[k]; });

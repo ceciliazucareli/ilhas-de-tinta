@@ -2,7 +2,10 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>Ilhas de Tinta</title>
   <meta name="description" content="Jogo infantil de pintar a ilha: conquiste território com seu explorador.">
   <meta name="theme-color" content="#7ccfff">
@@ -20,51 +23,73 @@
   </div>
 
   <main class="palco">
-    <h1 class="titulo">Ilhas de Tinta</h1>
+    <!-- Topo: placar compacto + botões de tela cheia e pausa -->
+    <header class="topo">
+      <!-- HUD do modo solo: porcentagem conquistada e meta -->
+      <section id="hud-solo" class="hud" aria-label="Progresso">
+        <div class="hud-linha">
+          <strong id="porcentagem" class="hud-porcentagem">0%</strong>
+          <div class="barra" role="presentation">
+            <div id="barra-preenchida" class="barra-preenchida"></div>
+            <div id="marca-meta" class="marca-meta" title="Meta"></div>
+          </div>
+          <span id="texto-meta" class="hud-meta">Meta 80%</span>
+        </div>
+      </section>
 
-    <!-- HUD do modo solo: porcentagem conquistada e meta -->
-    <section id="hud-solo" class="hud" aria-label="Progresso">
-      <div class="hud-linha">
-        <span class="hud-rotulo">Conquistado</span>
-        <strong id="porcentagem" class="hud-porcentagem">0%</strong>
-        <span id="texto-meta" class="hud-meta">Conquiste 80% do mapa!</span>
-      </div>
-      <div class="barra" role="presentation">
-        <div id="barra-preenchida" class="barra-preenchida"></div>
-        <div id="marca-meta" class="marca-meta" title="Meta"></div>
-      </div>
-    </section>
+      <!-- HUD com vários jogadores: placar colorido e relógio -->
+      <section id="hud-multi" class="hud hud-multi" aria-label="Placar" hidden>
+        <div class="hud-linha">
+          <ol id="placar" class="placar"></ol>
+          <strong id="relogio" class="relogio" aria-live="off">⏱ 2:00</strong>
+        </div>
+        <p id="meta-multi" class="meta-multi"></p>
+      </section>
 
-    <!-- HUD do modo com vários jogadores: placar colorido e relógio -->
-    <section id="hud-multi" class="hud hud-multi" aria-label="Placar" hidden>
-      <div class="hud-linha">
-        <ol id="placar" class="placar"></ol>
-        <strong id="relogio" class="relogio" aria-live="off">⏱ 2:00</strong>
+      <div class="topo-botoes">
+        <button id="botao-tela-cheia" class="botao-redondo" aria-label="Tela cheia" title="Tela cheia" hidden>⛶</button>
+        <button id="botao-pausa" class="botao-redondo" aria-label="Pausar e opções" title="Pausar e opções">⏸</button>
       </div>
-      <p id="meta-multi" class="meta-multi"></p>
-    </section>
+    </header>
 
     <div class="moldura">
       <canvas id="tela" aria-label="Mapa da ilha"></canvas>
       <div id="mensagem" class="mensagem" role="status" aria-live="polite"></div>
 
+      <!-- Dica do começo da partida: deslizar o dedo (toque) ou as teclas (computador) -->
+      <div id="dica-inicio" class="dica-inicio" hidden aria-live="polite">
+        <span class="dica-mao" aria-hidden="true">👆</span>
+        <span id="dica-texto">Deslize o dedo para mudar de direção</span>
+      </div>
+
+      <!-- Online: avisos de espera (anfitrião fora da tela, conexão lenta) -->
+      <div id="aviso-rede" class="aviso-rede" hidden role="status" aria-live="polite"></div>
+
+      <!-- Setas na tela (opcionais: ligue nas opções do botão ⏸) -->
+      <div id="controles-toque" class="controles" aria-label="Setas na tela" hidden>
+        <button class="seta cima" data-direcao="cima" aria-label="Cima">▲</button>
+        <button class="seta esquerda" data-direcao="esquerda" aria-label="Esquerda">◀</button>
+        <button class="seta direita" data-direcao="direita" aria-label="Direita">▶</button>
+        <button class="seta baixo" data-direcao="baixo" aria-label="Baixo">▼</button>
+      </div>
+
       <!-- Menu inicial: Offline ou Online -->
       <div id="tela-menu" class="sobreposicao tela-cheia">
         <div class="cartao cartao-menu">
-          <h2>Bem-vindo à ilha!</h2>
-          <p>Saia do seu território pintado, dê uma voltinha pela grama e
-            volte para casa: tudo o que ficar dentro do caminho vira seu!</p>
-          <p class="dica">Cuidado para não pisar no próprio rastro de tinta.</p>
+          <h1 class="titulo">Ilhas de Tinta</h1>
+          <p class="menu-explica">Saia de casa, dê uma volta e volte:
+            <b>tudo dentro do caminho vira seu!</b></p>
+          <p class="dica">Só não pise no seu próprio rastro. 🙂</p>
           <div class="menu-botoes">
             <button id="botao-offline" class="botao-menu">
               <span class="botao-menu-icone" aria-hidden="true">🏠</span>
               <span class="botao-menu-titulo">Jogar Offline</span>
-              <span class="botao-menu-texto">Sozinho ou com amigos no mesmo computador</span>
+              <span id="botao-offline-texto" class="botao-menu-texto">Sozinho, contra a CPU ou com amigos no teclado</span>
             </button>
             <button id="botao-online" class="botao-menu botao-menu-online">
               <span class="botao-menu-icone" aria-hidden="true">🌍</span>
               <span class="botao-menu-titulo">Jogar Online</span>
-              <span class="botao-menu-texto">Cada um no seu aparelho, pela internet</span>
+              <span class="botao-menu-texto">Com amigos, cada um no seu aparelho</span>
             </button>
           </div>
           <p id="menu-aviso" class="aviso-online" role="status" aria-live="polite"></p>
@@ -83,8 +108,13 @@
           <p class="ou">ou</p>
           <label class="campo">
             <span>Código da sala</span>
-            <input id="online-codigo" class="campo-texto campo-codigo" maxlength="10" autocomplete="off"
-                   placeholder="TINTA-1234" autocapitalize="characters" spellcheck="false">
+            <span class="campo-codigo-grupo">
+              <span class="campo-prefixo" aria-hidden="true">TINTA-</span>
+              <!-- Teclado de números no celular; aceita também "TINTA-1234" colado. -->
+              <input id="online-codigo" class="campo-texto campo-codigo" maxlength="10" autocomplete="off"
+                     inputmode="numeric" placeholder="1234" autocapitalize="characters" spellcheck="false"
+                     aria-label="Código da sala (os 4 números)">
+            </span>
           </label>
           <button id="online-entrar" class="botao botao-grande">🚪 Entrar</button>
           <p id="online-aviso" class="aviso-online" role="status" aria-live="polite"></p>
@@ -127,10 +157,9 @@
       <div id="tela-configuracao" class="sobreposicao" hidden>
         <div class="cartao cartao-largo">
           <h2>Jogar Offline 🏠</h2>
-          <p class="dica">Sozinho, com amigos no mesmo teclado ou contra a CPU.</p>
 
           <div id="setup" class="setup">
-            <p class="setup-titulo">Quantos jogadores?</p>
+            <p id="setup-titulo" class="setup-titulo">Quantos jogadores?</p>
             <div id="setup-quantidade" class="setup-quantidade" role="radiogroup" aria-label="Número de jogadores"></div>
             <ul id="setup-vagas" class="setup-vagas"></ul>
           </div>
@@ -139,6 +168,20 @@
             <button id="botao-jogar" class="botao botao-grande">Jogar</button>
             <button id="botao-config-voltar" class="botao botao-secundario">Voltar</button>
           </div>
+        </div>
+      </div>
+
+      <!-- Pausa e opções (botão ⏸) -->
+      <div id="tela-pausa" class="sobreposicao tela-cheia" hidden>
+        <div class="cartao cartao-menu">
+          <h2 id="pausa-titulo">Pausado ⏸</h2>
+          <p id="pausa-texto" class="dica"></p>
+          <button id="pausa-continuar" class="botao botao-grande">▶ Continuar</button>
+          <div class="opcoes-lista">
+            <button id="opcao-vibrar" class="opcao opcao-linha" aria-pressed="true">📳 Vibrar: <b>sim</b></button>
+            <button id="opcao-setas" class="opcao opcao-linha" aria-pressed="false">🎮 Setas na tela: <b>não</b></button>
+          </div>
+          <button id="pausa-sair" class="botao botao-secundario">🏠 Sair para o menu</button>
         </div>
       </div>
 
@@ -157,12 +200,6 @@
       </div>
     </div>
 
-    <div id="controles-toque" class="controles" aria-label="Controles de toque">
-      <button class="seta cima" data-direcao="cima" aria-label="Cima">▲</button>
-      <button class="seta esquerda" data-direcao="esquerda" aria-label="Esquerda">◀</button>
-      <button class="seta direita" data-direcao="direita" aria-label="Direita">▶</button>
-      <button class="seta baixo" data-direcao="baixo" aria-label="Baixo">▼</button>
-    </div>
   </main>
 
   <!-- Scripts clássicos (sem módulos) para abrir com duplo clique. A ordem importa. -->

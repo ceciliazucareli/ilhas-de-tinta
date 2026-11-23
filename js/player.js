@@ -15,6 +15,7 @@
     this.direcao = null;   // direção atual do movimento (null = parado)
     this.ultimaDirecao = 'baixo'; // para onde está olhando
     this.proximaDirecao = null;   // pedida pelo teclado/toque/CPU
+    this.filaDirecao = null;      // virada seguinte, já pedida (ex.: "cima" e logo "esquerda")
     this.velocidade = 1;   // multiplicador da velocidade base (CPU fácil é mais lenta)
     // Quando há rastro, a meia-volta fica travada mesmo parado na borda,
     // para o explorador não pisar sem querer no próprio rastro.
@@ -24,9 +25,24 @@
     this.controlador = null;
   }
 
-  /* Guarda a direção pedida; ela é aplicada ao chegar na próxima célula. */
+  /*
+   * Guarda a direção pedida; ela é aplicada ao chegar na próxima célula.
+   * Meia-volta (180°) é recusada. Se a pessoa pedir duas viradas rápidas
+   * (andando para a direita: "cima" e logo "esquerda"), a segunda espera na
+   * fila e acontece na célula seguinte. Devolve false se o pedido foi recusado.
+   */
   Explorador.prototype.pedirDirecao = function (nome) {
+    if (nome === this.direcaoProibida()) {
+      var pendente = this.proximaDirecao;
+      if (pendente && pendente !== nome && IT.OPOSTA[pendente] !== nome) {
+        this.filaDirecao = nome;
+        return true;
+      }
+      return false;
+    }
     this.proximaDirecao = nome;
+    this.filaDirecao = null;
+    return true;
   };
 
   Explorador.prototype.andando = function () {
@@ -54,6 +70,7 @@
     this.progresso = 0;
     this.direcao = null;
     this.proximaDirecao = null;
+    this.filaDirecao = null;
     this.travarMeiaVolta = false;
   };
 
@@ -68,8 +85,11 @@
     if (pedida) {
       this.direcao = pedida;
       this.ultimaDirecao = pedida;
+      this.proximaDirecao = this.filaDirecao; // a próxima virada da fila, se houver
+    } else {
+      this.proximaDirecao = null;
     }
-    this.proximaDirecao = null;
+    this.filaDirecao = null;
     if (!this.direcao) return;
 
     var d = IT.DIRECOES[this.direcao];

@@ -1,16 +1,24 @@
 /* style.css — página, moldura do canvas e controles de toque. */
 * { box-sizing: border-box; }
 
+html { height: 100%; -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;           /* altura real da tela no celular (sem a barra do navegador) */
+  overflow: hidden;         /* o jogo ocupa a tela toda, sem rolagem */
+  overscroll-behavior: none; /* sem "puxar para atualizar" */
+  -webkit-tap-highlight-color: transparent;
   /* Fontes arredondadas do sistema, quando existirem (sem baixar nada). */
   font-family: ui-rounded, "Nunito", "Varela Round", "Arial Rounded MT Bold",
     "Comic Neue", "Trebuchet MS", system-ui, sans-serif;
   color: #3a3f63;
   background: linear-gradient(#7ccfff, #c7ecff 70%, #e9f8ff);
-  overflow-x: hidden;
 }
+
+/* Durante a partida: nada de selecionar texto, menu de toque longo ou zoom. */
+body.em-jogo { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+body.em-jogo .moldura { touch-action: none; }
 
 /* Céu com nuvens fofinhas feitas só com CSS. */
 .ceu { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
@@ -39,17 +47,35 @@ body {
 .palco {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
+  height: 100%;
+  /* Respeita o "entalhe" e a barra de gestos do iPhone. */
+  padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right))
+           max(4px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+  gap: 6px;
 }
 
 .titulo {
-  margin: 4px 0 0; font-size: 2.3rem; letter-spacing: 0.02em;
-  color: #fff; text-shadow: 0 3px 0 #ff7eb6, 0 6px 14px rgba(226, 88, 154, 0.35);
+  margin: 0 0 4px; font-size: clamp(1.8rem, 7vw, 2.4rem); letter-spacing: 0.02em;
+  color: #ff7eb6; text-shadow: 0 3px 0 #ffd9ea;
 }
 
-.moldura { position: relative; width: 100%; max-width: 876px; }
+/* Topo: placar compacto + botões redondos. */
+.topo {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; max-width: 1100px; margin: 0 auto; flex: none;
+}
+.topo .hud { flex: 1; min-width: 0; }
+.topo-botoes { display: flex; gap: 6px; flex: none; }
+.botao-redondo {
+  width: 48px; height: 48px; border: none; border-radius: 50%;
+  background: #fff; color: #e2589a; font-size: 1.4rem; font-weight: 800;
+  box-shadow: 0 4px 0 #ffb3d4; cursor: pointer; touch-action: manipulation;
+}
+.botao-redondo:active { transform: translateY(2px); box-shadow: 0 2px 0 #ffb3d4; }
+.botao-redondo[hidden] { display: none; }
+
+/* Área de jogo: ocupa todo o resto da tela; o canvas preenche e a câmera ajusta. */
+.moldura { position: relative; flex: 1; min-height: 0; width: 100%; }
 
 /* Balão de mensagem que aparece por cima do mapa. */
 .mensagem {
@@ -64,15 +90,19 @@ body {
 .mensagem.visivel { opacity: 1; transform: translate(-50%, 0) scale(1); }
 .mensagem.aviso { color: #e2589a; }
 .mensagem.sucesso { color: #4a9d2f; }
-canvas { display: block; width: 100%; height: auto; }
+canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 
+/* Setas na tela (opcionais), no canto de baixo à direita. */
 .controles {
+  position: absolute; right: 10px; bottom: 10px; z-index: 3;
   display: grid;
   grid-template-columns: repeat(3, 56px);
   grid-template-rows: repeat(2, 56px);
   gap: 6px;
   touch-action: none;
+  opacity: 0.92;
 }
+.controles[hidden] { display: none; }
 .seta {
   border: none; border-radius: 16px;
   background: #fff; color: #ff7eb6; font-size: 1.4rem;
@@ -85,19 +115,17 @@ canvas { display: block; width: 100%; height: auto; }
 .seta.baixo { grid-column: 2; grid-row: 2; }
 .seta.direita { grid-column: 3; grid-row: 2; }
 
-/* HUD: porcentagem e barra de progresso com marca da meta. */
+/* HUD: porcentagem e barra de progresso com marca da meta (uma linha só). */
 .hud {
-  width: 100%; max-width: 876px;
-  padding: 10px 18px 14px; border-radius: 22px;
-  background: rgba(255, 255, 255, 0.85);
-  box-shadow: 0 6px 18px rgba(60, 80, 140, 0.12);
+  padding: 6px 14px; border-radius: 20px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 4px 14px rgba(60, 80, 140, 0.12);
 }
-.hud-linha { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.hud-rotulo { font-weight: 700; }
-.hud-porcentagem { font-size: 1.6rem; color: #e2589a; min-width: 3ch; }
-.hud-meta { margin-left: auto; font-weight: 700; color: #4a9d2f; }
+.hud-linha { display: flex; align-items: center; gap: 10px; }
+.hud-porcentagem { font-size: 1.5rem; color: #e2589a; min-width: 3.2ch; }
+.hud-meta { font-weight: 800; color: #4a9d2f; white-space: nowrap; }
 .barra {
-  position: relative; height: 14px; margin-top: 6px;
+  flex: 1; position: relative; height: 14px;
   border-radius: 999px; background: #e3f4d3; overflow: visible;
 }
 .barra-preenchida {
@@ -110,16 +138,19 @@ canvas { display: block; width: 100%; height: auto; }
   margin-left: -2px; border-radius: 2px; background: #4a9d2f;
 }
 
-/* Telas de início e vitória por cima do mapa. */
+/* Telas por cima do jogo (menu, configuração, sala, pausa, fim): tela toda, com rolagem se precisar. */
 .sobreposicao {
-  position: absolute; inset: 0;
+  position: fixed; inset: 0; z-index: 10;
   display: flex; align-items: center; justify-content: center;
-  padding: 16px; border-radius: 24px;
-  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 70%);
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+           max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: rgba(124, 207, 255, 0.45);
 }
+#tela-fim { background: rgba(124, 207, 255, 0.25); }
 .sobreposicao[hidden] { display: none; }
 .cartao {
-  max-width: 440px; padding: 24px 28px; text-align: center;
+  max-width: 440px; width: 100%; margin: auto; padding: 22px 22px; text-align: center;
   border-radius: 28px; background: #fff;
   box-shadow: 0 10px 30px rgba(60, 80, 140, 0.25);
 }
@@ -171,10 +202,7 @@ canvas { display: block; width: 100%; height: auto; }
 
 /* ---------- Tela de configuração ---------- */
 /* A configuração ocupa a tela toda (com rolagem), para caber 4 jogadores. */
-#tela-configuracao, .tela-cheia {
-  position: fixed; z-index: 10; overflow-y: auto; border-radius: 0;
-  background: rgba(124, 207, 255, 0.6);
-}
+#tela-configuracao, .tela-cheia { background: rgba(124, 207, 255, 0.6); }
 .sobreposicao[hidden] { display: none; }
 .cartao-largo { max-width: 860px; width: 100%; margin: auto; }
 .setup { margin-top: 12px; text-align: left; }
@@ -207,13 +235,14 @@ canvas { display: block; width: 100%; height: auto; }
   border: 3px solid var(--cor-escura);
 }
 .vaga-nome {
+  min-height: 44px;
   flex: 1; min-width: 120px; padding: 8px 10px;
   border: 2px solid #d7dcf5; border-radius: 12px;
   font: inherit; font-weight: 700; font-size: 1.05rem; color: #3a3f63;
 }
 .vaga-linha { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .vaga-rotulo { font-size: 0.9rem; font-weight: 700; color: #6a6f93; min-width: 60px; }
-.vaga .opcao { min-width: 44px; min-height: 40px; font-size: 1rem; padding: 4px 12px; }
+.vaga .opcao { min-width: 44px; min-height: 44px; font-size: 1rem; padding: 4px 12px; }
 .cor-opcao {
   width: 40px; height: 40px; border-radius: 50%;
   border: 3px solid #fff; box-shadow: 0 0 0 2px #d7dcf5; cursor: pointer;
@@ -262,7 +291,8 @@ canvas { display: block; width: 100%; height: auto; }
 .botao-menu-titulo { font-size: 1.5rem; font-weight: 800; }
 .botao-menu-texto { font-size: 0.95rem; opacity: 0.95; }
 
-.campo { display: grid; gap: 4px; margin: 12px auto 0; max-width: 320px; text-align: left; font-weight: 700; }
+.campo { display: grid; gap: 4px; margin: 12px auto 0; width: 100%; max-width: 320px; text-align: left; font-weight: 700; }
+.campo-texto { width: 100%; }
 .campo-texto {
   padding: 10px 14px; border: 3px solid #d7dcf5; border-radius: 14px;
   font: inherit; font-size: 1.2rem; font-weight: 700; color: #3a3f63;
@@ -294,11 +324,85 @@ canvas { display: block; width: 100%; height: auto; }
 .opcao:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Telas pequenas (celular): textos e botões um pouco menores. */
+/* Campo do código: prefixo fixo "TINTA-" + os números. */
+.campo-codigo-grupo { display: flex; align-items: center; gap: 6px; }
+.campo-prefixo { font-size: 1.25rem; font-weight: 800; color: #e2589a; letter-spacing: 0.06em; }
+.campo-codigo-grupo .campo-texto { flex: 1; min-width: 0; }
+
+/* Configuração simples (celular). */
+.setup-quantidade { flex-wrap: wrap; }
+.opcao-simples { font-size: 1.1rem; padding: 8px 14px; }
+.vaga-simples { justify-items: center; }
+.vaga-simples .vaga-linha { justify-content: center; }
+.link-opcoes {
+  border: none; background: none; color: #6a6f93; font: inherit; font-weight: 700;
+  text-decoration: underline; cursor: pointer; min-height: 44px;
+}
+
+/* ---------- Dica do começo, avisos e pausa ---------- */
+.dica-inicio {
+  position: absolute; left: 50%; bottom: 18%; z-index: 4;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 12px 20px; border-radius: 22px; max-width: 86%;
+  background: rgba(255, 255, 255, 0.92); box-shadow: 0 6px 18px rgba(60, 80, 140, 0.2);
+  font-weight: 800; font-size: 1.15rem; text-align: center; pointer-events: none;
+}
+.dica-inicio[hidden] { display: none; }
+.dica-mao { font-size: 2.2rem; animation: deslizar 1.6s ease-in-out infinite; }
+.dica-inicio.teclado .dica-mao { animation: none; }
+@keyframes deslizar {
+  0% { transform: translate(-26px, 0); }
+  35% { transform: translate(26px, 0); }
+  50% { transform: translate(26px, 0); }
+  85% { transform: translate(26px, -30px); }
+  100% { transform: translate(-26px, 0); }
+}
+.aviso-rede {
+  position: absolute; left: 50%; top: 40%; z-index: 5; transform: translate(-50%, -50%);
+  padding: 16px 22px; border-radius: 22px; max-width: 88%;
+  background: #fff; color: #3a3f63; font-weight: 800; font-size: 1.15rem; text-align: center;
+  box-shadow: 0 8px 24px rgba(60, 80, 140, 0.3);
+}
+.aviso-rede[hidden] { display: none; }
+.opcoes-lista { display: grid; gap: 8px; margin: 16px auto 0; max-width: 320px; }
+.opcao-linha { width: 100%; min-height: 48px; text-align: left; }
+
+/* Botões e campos sempre com área de toque confortável (≥ 44 px). */
+.botao, .opcao, .cor-opcao, .seta, .botao-menu { min-height: 44px; }
+.cor-opcao { min-width: 44px; width: 44px; height: 44px; }
+
+/* ---------- Telas pequenas (celular) ---------- */
 @media (max-width: 560px) {
-  .titulo { font-size: 1.7rem; }
-  .hud-meta { margin-left: 0; width: 100%; }
-  .cartao { padding: 16px 18px; }
-  /* O mapa fica pequeno: as telas de início/vitória cobrem a página toda. */
-  .sobreposicao { position: fixed; z-index: 10; border-radius: 0; background: rgba(124, 207, 255, 0.55); }
-  .cartao p { font-size: 0.92rem; }
+  .cartao { padding: 16px 14px; border-radius: 24px; }
+  .cartao p { font-size: 0.98rem; }
+  .hud { padding: 5px 10px; }
+  .hud-porcentagem { font-size: 1.3rem; }
+  .meta-multi { display: none; }          /* a meta aparece no começo e no fim */
+  /* Placar numa linha só: bolinha + %; o seu chip fica destacado. */
+  .placar { gap: 4px; flex-wrap: wrap; }
+  .chip { padding: 2px 7px 2px 3px; font-size: 0.85rem; border-width: 2px; gap: 3px; }
+  .chip-nome { display: none; }
+  .chip.voce { box-shadow: 0 0 0 3px var(--cor-escura); }
+  .chip-pct { font-size: 1rem; }
+  .hud-multi .hud-linha { gap: 6px; flex-wrap: wrap; }
+  .hud-multi .relogio { margin-left: 0; }
+  .chip-bolinha { width: 14px; height: 14px; }
+  .relogio { font-size: 1.05rem; padding: 2px 8px; }
+  .botao-menu { padding: 12px 14px; }
+  .botao-menu-titulo { font-size: 1.3rem; }
+  .botao-grande { font-size: 1.25rem; padding: 12px 32px; }
+  .sala-codigo { font-size: 2.1rem; }
+  .setup-vagas { grid-template-columns: 1fr; }
+  .mensagem { font-size: 1rem; top: 10px; max-width: 92%; white-space: normal; text-align: center; }
+}
+
+/* Celular deitado: pouca altura, então o topo fica ainda mais baixo. */
+@media (max-height: 480px) and (orientation: landscape) {
+  .palco { gap: 4px; }
+  .hud { padding: 3px 10px; }
+  .botao-redondo { width: 44px; height: 44px; font-size: 1.2rem; }
+  .meta-multi { display: none; }
+  .dica-inicio { bottom: 10%; }
+}
 }

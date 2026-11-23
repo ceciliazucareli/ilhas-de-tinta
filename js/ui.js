@@ -18,6 +18,7 @@
     configuracao: { id: 'tela-configuracao', foco: 'botao-jogar' },
     online: { id: 'tela-online', foco: 'online-nome' },
     sala: { id: 'tela-sala', foco: 'sala-jogar' },
+    pausa: { id: 'tela-pausa', foco: 'pausa-continuar' },
     fim: { id: 'tela-fim', foco: 'botao-jogar-de-novo' }
   };
 
@@ -57,6 +58,24 @@
       $('botao-jogar').addEventListener('click', callbacks.aoJogar);
       el.botaoJogarDeNovo.addEventListener('click', callbacks.aoJogarDeNovo);
       el.botaoMudarJogadores.addEventListener('click', callbacks.aoMudarJogadores);
+      $('botao-pausa').addEventListener('click', callbacks.aoPausar);
+      $('pausa-continuar').addEventListener('click', callbacks.aoContinuar);
+      $('pausa-sair').addEventListener('click', callbacks.aoSairDaPartida);
+      $('opcao-vibrar').addEventListener('click', function () { IT.ui.trocarOpcao('vibrar'); IT.ui.vibrar(30); });
+      $('opcao-setas').addEventListener('click', function () { IT.ui.trocarOpcao('setas'); });
+      var telaCheia = $('botao-tela-cheia');
+      var raiz = document.documentElement;
+      if (document.fullscreenEnabled && raiz.requestFullscreen) {
+        telaCheia.hidden = false;
+        telaCheia.addEventListener('click', function () {
+          if (document.fullscreenElement) document.exitFullscreen();
+          else raiz.requestFullscreen({ navigationUI: 'hide' }).catch(function () { /* recusado */ });
+        });
+        document.addEventListener('fullscreenchange', function () {
+          telaCheia.textContent = document.fullscreenElement ? '🗗' : '⛶';
+        });
+      }
+      IT.ui.carregarOpcoes();
       $('botao-offline').addEventListener('click', callbacks.aoOffline);
       $('botao-online').addEventListener('click', callbacks.aoOnline);
       $('botao-config-voltar').addEventListener('click', callbacks.aoVoltarMenu);
@@ -70,10 +89,10 @@
       el.hudMulti.hidden = solo;
 
       if (solo) {
-        el.textoMeta.textContent = 'Conquiste ' + meta + '% do mapa!';
+        el.textoMeta.textContent = 'Meta ' + meta + '%';
         el.marcaMeta.style.left = meta + '%';
       } else {
-        el.metaMulti.textContent = 'Chegue a ' + meta + '% do mapa ou tenha mais território quando o tempo acabar!';
+        el.metaMulti.textContent = 'Ganha quem chegar a ' + meta + '% ou tiver mais no fim do tempo!';
         el.placar.innerHTML = '';
         chips = jogo.jogadores.map(function (j) {
           var li = document.createElement('li');
@@ -83,6 +102,8 @@
           li.innerHTML = '<span class="chip-bolinha"></span>' +
             '<span class="chip-nome"></span><strong class="chip-pct">0%</strong>';
           li.querySelector('.chip-nome').textContent = j.nome;
+          li.title = j.nome;
+          if (j.tipo === 'humano' && j.local) li.classList.add('voce'); // o jogador deste aparelho
           el.placar.appendChild(li);
           return li;
         });
@@ -90,8 +111,9 @@
       }
 
       // Botões de toque só aparecem se houver algum humano jogando.
-      var temHumano = jogo.jogadores.some(function (j) { return j.tipo === 'humano'; });
-      el.controlesToque.hidden = !temHumano;
+      var temHumano = jogo.jogadores.some(function (j) { return j.tipo === 'humano' && j.local; });
+      el.temHumanoLocal = temHumano;
+      IT.ui.aplicarOpcoes();
     },
 
     /* Atualiza a porcentagem de cada jogador. */
@@ -127,7 +149,10 @@
         tela.hidden = nome !== estado;
         if (nome === estado) foco = $(TELAS[nome].foco);
       });
-      if (foco && !foco.hidden && !foco.disabled) foco.focus();
+      if (foco && !foco.hidden && !foco.disabled && !document.body.classList.contains('toque')) foco.focus();
+      // Durante a partida, o navegador não pode rolar, dar zoom nem selecionar texto.
+      document.body.classList.toggle('em-jogo', estado === 'jogando');
+      if (estado !== 'jogando') IT.ui.esconderDica();
       if (estado === 'jogando' && document.activeElement) document.activeElement.blur();
     },
 
@@ -179,6 +204,77 @@
         el.fimRanking.hidden = false;
       }
       IT.ui.mostrarEstado('fim');
+    },
+
+    /* ---------- Opções (salvas neste aparelho) ---------- */
+
+    opcoes: { vibrar: true, setas: false },
+
+    carregarOpcoes: function () {
+      try {
+        var salvas = JSON.parse(localStorage.getItem('ilhas-de-tinta:opcoes') || '{}');
+        if (typeof salvas.vibrar === 'boolean') IT.ui.opcoes.vibrar = salvas.vibrar;
+        if (typeof salvas.setas === 'boolean') IT.ui.opcoes.setas = salvas.setas;
+      } catch (e) { /* sem armazenamento: fica o padrão */ }
+      IT.ui.aplicarOpcoes();
+    },
+
+    trocarOpcao: function (nome) {
+      IT.ui.opcoes[nome] = !IT.ui.opcoes[nome];
+      try { localStorage.setItem('ilhas-de-tinta:opcoes', JSON.stringify(IT.ui.opcoes)); } catch (e) { /* ok */ }
+      IT.ui.aplicarOpcoes();
+    },
+
+    aplicarOpcoes: function () {
+      var o = IT.ui.opcoes;
+      var vib = $('opcao-vibrar'), set = $('opcao-setas');
+      vib.hidden = !('vibrate' in navigator);
+      vib.setAttribute('aria-pressed', String(o.vibrar));
+      vib.querySelector('b').textContent = o.vibrar ? 'sim' : 'não';
+      set.setAttribute('aria-pressed', String(o.setas));
+      set.querySelector('b').textContent = o.setas ? 'sim' : 'não';
+      // Setas na tela: escondidas por padrão (no celular, deslizar o dedo é melhor).
+      el.controlesToque.hidden = !(o.setas && el.temHumanoLocal);
+    },
+
+    /* Vibração curta (se o aparelho tiver e a opção estiver ligada). */
+    vibrar: function (padrao) {
+      if (IT.ui.opcoes.vibrar && navigator.vibrate) {
+        try { navigator.vibrate(padrao); } catch (e) { /* alguns navegadores bloqueiam */ }
+      }
+    },
+
+    /* Espaço livre embaixo do minimapa (as setas na tela ficam à direita). */
+    margemMinimapa: function () { return 10; },
+
+    /* ---------- Dica do começo da partida ---------- */
+
+    mostrarDica: function (toque) {
+      var dica = $('dica-inicio');
+      dica.classList.toggle('teclado', !toque);
+      $('dica-texto').textContent = toque
+        ? 'Deslize o dedo para mudar de direção'
+        : 'Use as setas ou W A S D para andar';
+      dica.querySelector('.dica-mao').textContent = toque ? '👆' : '⌨️';
+      dica.hidden = false;
+      clearTimeout(IT.ui._timerDica);
+      IT.ui._timerDica = setTimeout(IT.ui.esconderDica, toque ? 9000 : 5000);
+    },
+
+    esconderDica: function () { $('dica-inicio').hidden = true; },
+
+    /* ---------- Aviso de espera (online) ---------- */
+
+    avisoRede: function (texto) {
+      var a = $('aviso-rede');
+      a.textContent = texto || '';
+      a.hidden = !texto;
+    },
+
+    /* Tela de pausa: online, só o anfitrião pausa de verdade. */
+    configurarPausa: function (titulo, texto) {
+      $('pausa-titulo').textContent = titulo;
+      $('pausa-texto').textContent = texto || '';
     },
 
     /* Mostra um balão de mensagem por alguns segundos (cor opcional do texto). */

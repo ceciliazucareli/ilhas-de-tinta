@@ -28,6 +28,8 @@
   var jogo = {
     estado: 'menu',
     rede: null,        // conexão online (online.js) ou null no modo offline
+    pausado: false,    // offline ou anfitrião: a simulação está parada
+    menuAberto: false, // a tela de pausa/opções está aberta
     aoAvisar: null,    // gancho: function (texto, tipo, idJogador)
     aoFim: null,       // gancho: function (ranking, porTempo)
     modo: 'solo',
@@ -181,7 +183,14 @@
   /* Balão de mensagem; no multi o texto sai na cor do jogador envolvido. */
   function avisar(texto, tipo, j) {
     IT.ui.mostrarMensagem(texto, tipo, jogo.modo === 'multi' && j ? j.cor.escura : null);
+    vibrarPara(j, tipo);
     if (jogo.aoAvisar) jogo.aoAvisar(texto, tipo, j ? j.id : 0);
+  }
+
+  /* Vibração curta quando o aviso é sobre quem joga NESTE aparelho. */
+  function vibrarPara(j, tipo) {
+    if (!j || j.tipo !== 'humano' || !j.local) return;
+    IT.ui.vibrar(tipo === 'sucesso' ? 25 : [40, 60, 40]);
   }
 
   /* Online: quem saiu da sala no meio da partida passa a ser jogado pela CPU. */
@@ -230,6 +239,8 @@
     if (!atingiuMeta && !acabouTempo) return false;
 
     jogo.estado = 'fim';
+    jogo.menuAberto = false;
+    telaAcesa(false);
     jogo.jogadores.forEach(function (j) {
       j.explorador.teleportar(j.explorador.x, j.explorador.y);
     });
@@ -244,6 +255,8 @@
   /* Cliente online: o anfitrião avisou o fim e mandou o ranking ([id, celulas]). */
   function mostrarFimRemoto(pares, porTempo) {
     jogo.estado = 'fim';
+    jogo.menuAberto = false;
+    telaAcesa(false);
     var lista = pares.map(function (p) {
       var j = jogadorPorId(p[0]);
       return { jogador: j, celulas: p[1], fracao: p[1] / jogo.grade.total };
@@ -260,12 +273,89 @@
   function jogar(configuracao, opcoes) {
     novaPartida(configuracao || jogo.configuracao, opcoes);
     jogo.estado = 'jogando';
+    jogo.pausado = false;
+    jogo.menuAberto = false;
     IT.ui.esconderMensagem();
+    IT.ui.avisoRede('');
     IT.ui.configurarFim(!jogo.rede ? 'offline' : jogo.rede.anfitriao ? 'anfitriao' : 'cliente');
     IT.ui.prepararPartida(jogo);
     IT.ui.atualizarHUD(jogo);
     IT.ui.mostrarEstado('jogando');
+    telaAcesa(true);
+    // Dica do começo: deslizar o dedo (toque) ou as teclas (computador).
+    if (jogo.jogadores.some(function (j) { return j.tipo === 'humano' && j.local; })) {
+      IT.ui.mostrarDica(ehToque());
+    }
   }
+
+  /* Aparelho de toque? (celular/tablet) */
+  function ehToque() {
+    return (window.matchMedia && matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
+  }
+
+  /* ---------- Pausa ---------- */
+
+  /*
+   * Offline ou anfitrião online: a partida para de verdade (o anfitrião avisa os
+   * outros aparelhos). Cliente online: só abre o menu; a partida continua.
+   */
+  function pausar(motivo) {
+    if (jogo.estado !== 'jogando' || jogo.menuAberto) return;
+    jogo.menuAberto = true;
+    var cliente = jogo.rede && !jogo.rede.anfitriao;
+    if (!cliente) {
+      jogo.pausado = true;
+      if (jogo.rede) jogo.rede.pausar(motivo || 'menu');
+      IT.ui.configurarPausa('Pausado ⏸', jogo.rede ? 'Todo mundo está esperando você voltar.' : '');
+    } else {
+      IT.ui.configurarPausa('Menu', 'A partida continua enquanto você olha o menu!');
+    }
+    IT.ui.esconderDica();
+    IT.ui.mostrarEstado('pausa');
+  }
+
+  function continuar() {
+    if (!jogo.menuAberto) return;
+    jogo.menuAberto = false;
+    jogo.pausado = false;
+    if (jogo.rede && jogo.rede.anfitriao) jogo.rede.retomar();
+    IT.ui.mostrarEstado('jogando');
+    telaAcesa(true);
+  }
+
+  function sairDaPartida() {
+    jogo.menuAberto = false;
+    jogo.pausado = false;
+    telaAcesa(false);
+    if (jogo.rede || (IT.online && IT.online.conexao())) { IT.online.sair(''); return; }
+    irPara('menu');
+  }
+
+  /* ---------- Tela acesa (Wake Lock) ---------- */
+
+  var travaTela = null;
+  function telaAcesa(sim) {
+    if (!('wakeLock' in navigator)) return;
+    if (sim && !travaTela && document.visibilityState === 'visible') {
+      navigator.wakeLock.request('screen').then(function (t) {
+        travaTela = t;
+        t.addEventListener('release', function () { if (travaTela === t) travaTela = null; });
+      }).catch(function () { /* sem permissão: tudo bem */ });
+    } else if (!sim && travaTela) {
+      travaTela.release().catch(function () {});
+      travaTela = null;
+    }
+  }
+
+  /* Sair da tela (bloqueou o celular, trocou de app, outra aba) pausa a partida. */
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') {
+      if (jogo.estado === 'jogando' && !jogo.menuAberto && !(jogo.rede && !jogo.rede.anfitriao)) pausar('fora');
+    } else if (jogo.estado === 'jogando') {
+      if (jogo.pausado && jogo.rede && jogo.rede.anfitriao) jogo.rede.pausar('menu'); // voltou, mas ainda no menu
+      telaAcesa(true);
+    }
+  });
 
   function mudarJogadores() {
     if (jogo.rede) { jogo.rede.mudarJogadores(); return; }
@@ -280,6 +370,9 @@
   /* Troca de tela fora da partida ('menu', 'configuracao', 'online', 'sala'). */
   function irPara(estado) {
     jogo.estado = estado;
+    jogo.pausado = false;
+    jogo.menuAberto = false;
+    telaAcesa(false);
     IT.ui.mostrarEstado(estado);
   }
 
@@ -291,10 +384,13 @@
    */
   function direcionar(esquema, direcao) {
     if (jogo.estado !== 'jogando') return false;
+    if (jogo.menuAberto) return false;
     if (jogo.rede) {
       // Online: cada aparelho controla só o próprio explorador (WASD, setas ou toque).
       if (esquema !== 0 && esquema !== 1 && esquema !== 'toque') return false;
-      return jogo.rede.direcionar(direcao);
+      var aceitou = jogo.rede.direcionar(direcao);
+      if (aceitou) IT.ui.esconderDica();
+      return aceitou;
     }
     var humanos = jogo.jogadores.filter(function (j) { return j.tipo === 'humano'; });
     var alvo = null;
@@ -306,8 +402,9 @@
       alvo = humanos.filter(function (j) { return j.slot === esquema; })[0] || null;
     }
     if (!alvo) return false;
-    alvo.explorador.pedirDirecao(direcao);
-    return true;
+    var ok = alvo.explorador.pedirDirecao(direcao);
+    if (ok) IT.ui.esconderDica();
+    return ok;
   }
 
   /* Enter/Espaço: confirma a tela atual. */
@@ -330,7 +427,7 @@
   /* Avança a lógica do jogo em "dt" segundos (sem desenhar). */
   function passo(dt) {
     jogo.ultimoTempo += dt;
-    if (jogo.estado !== 'jogando') return;
+    if (jogo.estado !== 'jogando' || jogo.pausado) return;
     if (jogo.rede && !jogo.rede.anfitriao) { interpolar(dt); return; }
     for (var i = 0; i < jogo.jogadores.length && jogo.estado === 'jogando'; i++) {
       var j = jogo.jogadores[i];
@@ -379,19 +476,34 @@
       aoMudarJogadores: mudarJogadores,
       aoOffline: function () { irPara('configuracao'); },
       aoOnline: function () { if (IT.online) IT.online.abrir(); },
-      aoVoltarMenu: function () { irPara('menu'); }
+      aoVoltarMenu: function () { irPara('menu'); },
+      aoPausar: function () { pausar('menu'); },
+      aoContinuar: continuar,
+      aoSairDaPartida: sairDaPartida
     });
     if (IT.setup) IT.setup.iniciar();
     if (IT.online) IT.online.iniciar();
     IT.ui.prepararPartida(jogo);
     IT.ui.atualizarHUD(jogo);
     IT.ui.mostrarEstado('menu');
-    IT.input.iniciar(direcionar, confirmar);
+    IT.input.iniciar(direcionar, confirmar, function () { IT.ui.esconderDica(); });
+    window.addEventListener('keydown', function (e) {
+      if (e.code === 'Escape' || e.code === 'KeyP') {
+        if (jogo.menuAberto) continuar(); else pausar('menu');
+      }
+    });
+    if (ehToque()) {
+      document.body.classList.add('toque');
+      document.getElementById('botao-offline-texto').textContent = 'Sozinho ou contra a CPU';
+    }
     requestAnimationFrame(quadro);
   });
 
   // Exposto para depuração e testes no console.
   jogo.jogar = jogar;
+  jogo.pausar = pausar;
+  jogo.continuar = continuar;
+  jogo.vibrarPara = vibrarPara;
   jogo.irPara = irPara;
   jogo.mostrarFimRemoto = mostrarFimRemoto;
   jogo.transformarEmCPU = transformarEmCPU;
