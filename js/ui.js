@@ -294,7 +294,13 @@
       a.hidden = !texto;
     },
 
-    /* Tela de pausa: online, só o anfitrião pausa de verdade. */
+    /* Online: chegou no meio da partida e está só assistindo até a próxima (issue #9). */
+    modoEspectador: function (sim) {
+      $('faixa-espectador').hidden = !sim;
+      document.body.classList.toggle('espectador', !!sim);
+    },
+
+        /* Tela de pausa: online, só o anfitrião pausa de verdade. */
     configurarPausa: function (titulo, texto) {
       $('pausa-titulo').textContent = titulo;
       $('pausa-texto').textContent = texto || '';

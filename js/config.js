@@ -42,8 +42,12 @@ window.IlhasDeTinta = window.IlhasDeTinta || {};
       TEMPO_CONEXAO: 8,             // segundos para desistir de conectar
       TEMPO_PROCURAR_SALA: 4,       // segundos esperando o anfitrião aparecer
       NIVEL_DE_QUEM_SAI: 'medio',   // quem sai no meio da partida vira CPU deste nível
-      TEMPO_ANFITRIAO_FORA: 15,     // anfitrião fora da tela por mais que isso: outro assume
-      TEMPO_ANFITRIAO_MUDO: 12      // nenhuma mensagem do anfitrião por mais que isso: outro assume
+      // Tolerância para ausências curtas (aba oculta, celular bloqueado, internet
+      // piscando): só depois disso alguém é considerado "fora" (issue #6).
+      TOLERANCIA_PARTIDA: 30,       // s: durante a partida (anfitrião fora → outro assume)
+      TOLERANCIA_SALA: 60,          // s: na sala de espera
+      TEMPO_DESISTIR: 90,           // s: tentando reconectar antes de desistir e voltar ao menu
+      SESSAO_VALE: 30 * 60          // s: recarregar a página até 30 min depois volta para a sala
     },
 
     CORES: {

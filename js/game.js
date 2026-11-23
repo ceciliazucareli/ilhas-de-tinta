@@ -533,6 +533,8 @@
     IT.ui.atualizarHUD(jogo);
     IT.ui.mostrarEstado('menu');
     if (IT.instalar) IT.instalar.iniciar(); // botão "Instalar", atualização e atalhos do app
+    // Recarregou a página no meio de uma sala online? Volta para ela (issue #6).
+    if (IT.online && !new URLSearchParams(location.search).get('sala')) IT.online.retomarSessao();
     IT.input.iniciar(direcionar, confirmar, function () { IT.ui.esconderDica(); });
     window.addEventListener('keydown', function (e) {
       if (e.code === 'Escape' || e.code === 'KeyP') {

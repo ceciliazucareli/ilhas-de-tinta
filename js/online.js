@@ -27,6 +27,9 @@
  *   dir       cliente → anfitrião  nova direção do explorador do cliente
  *   revanche  qualquer um → anfitrião  "quero revanche" (voto)
  *   votos     anfitrião → todos   quem já votou; com todos os humanos, começa outra partida
+ *   pedirEstado  cliente → anfitrião  "voltei / cheguei no meio: me mande tudo"
+ *   estadoCompleto anfitrião → um  configuração + foto completa (quem reconectou,
+ *                                  recarregou ou chegou no meio — esse assiste)
  *   pausa     anfitrião → todos   partida pausada (motivo: 'menu' ou 'fora' = saiu da tela)
  *   retomar   anfitrião → todos   partida continua
  *
@@ -34,8 +37,17 @@
  * PAUSA e os outros veem "O anfitrião saiu da tela, esperando…". Se nenhuma
  * mensagem chega por alguns segundos, os outros veem "Esperando o anfitrião…".
  *
+ * QUEDAS CURTAS (issue #6): quando o celular bloqueia ou a aba fica oculta, o
+ * navegador congela a página e o canal do Supabase cai ("transport failure").
+ * Em vez de sair da sala: mostramos "Reconectando…", reabrimos o canal com a
+ * MESMA identidade (cid) e pedimos o estado completo. Para os outros, quem some
+ * do Presence fica "saiu um pouquinho ⏳" por O.TOLERANCIA_PARTIDA/_SALA
+ * segundos antes de contar como saída (na partida, a CPU segura o explorador
+ * até a pessoa voltar). Código da sala + identidade ficam no sessionStorage:
+ * recarregar a página volta para a sala.
+ *
  * TROCA DE ANFITRIÃO: se o anfitrião sai da sala (Presence) ou fica mais de
- * O.TEMPO_ANFITRIAO_FORA segundos fora da tela, o próximo jogador da lista da
+ * O.TOLERANCIA_PARTIDA segundos fora da tela, o próximo jogador da lista da
  * sala assume (todos calculam o mesmo nome). Ele já tem o mapa, as posições e o
  * relógio: liga as CPUs e continua a partida. O explorador do antigo anfitrião
  * vira CPU; se ele voltar, recebe o controle de volta como jogador comum.
@@ -106,25 +118,38 @@
     if (!supa) {
       supa = window.supabase.createClient(O.SUPABASE_URL, O.SUPABASE_CHAVE, {
         auth: { persistSession: false, autoRefreshToken: false },
-        realtime: { params: { eventsPerSecond: 40 } }
+        // worker: o "batimento" da conexão roda num Web Worker, que o navegador
+        // não desacelera quando a aba fica oculta (ajuda a não cair; issue #6).
+        // heartbeatIntervalMs: percebe uma conexão morta (Wi-Fi caiu) em ~15 s, não ~60 s.
+        realtime: { params: { eventsPerSecond: 40 }, worker: true, heartbeatIntervalMs: 15000 }
       });
     }
     return supa;
   }
 
-  /* Entra no canal da sala; resolve quando estiver conectado. */
-  function conectar(codigo, anfitriao, nome) {
+  /*
+   * Entra no canal da sala; resolve quando estiver conectado.
+   * cidSalvo: a mesma identidade de antes (reconexão ou página recarregada).
+   */
+  function conectar(codigo, anfitriao, nome, cidSalvo) {
     var c = {
       codigo: codigo,
-      cid: gerarId(),
+      cid: cidSalvo || gerarId(),
       nome: nome,
       anfitriao: anfitriao,
       canal: null,
+      inscrito: false,         // o canal está conectado agora?
+      jaConectou: false,
+      caiuEm: 0,               // quando o canal caiu (0 = está ok)
+      ultimaTentativa: 0,
+      presenca: null,          // o que anunciamos no Presence (para repetir ao reconectar)
+      historicoStatus: [],     // últimos status do canal (para testes/diagnóstico)
       sala: null,            // estado da sala (o anfitrião é o dono da verdade)
       rodada: 0,
       seq: 0,
       ultimoSeq: -1,
       vistoAnfitriao: false,
+      anfitriaoAusenteDesde: 0,
       timers: [],
       copiaDonos: null,
       copiaRastros: null,
@@ -140,37 +165,54 @@
       pausaRemota: 0,          // cliente: o anfitrião avisou que pausou
       ultimaMensagemEm: 0      // cliente: quando chegou o último estado
     };
-    var canal = clienteSupabase().channel('ilhas-de-tinta-' + codigo, {
+    c.vigiaConexao = setInterval(function () { vigiarConexao(c); }, 1000);
+    return abrirCanal(c, true);
+  }
+
+  /* Abre (ou reabre) o canal da sala. Na primeira vez, falha se não conectar. */
+  function abrirCanal(c, primeira) {
+    var canal = clienteSupabase().channel('ilhas-de-tinta-' + c.codigo, {
       config: { broadcast: { self: false }, presence: { key: c.cid } }
     });
     c.canal = canal;
+    c.inscrito = false;
+    var ativo = function () { return !c.fechada && c.canal === canal && (con === c || primeira); };
 
     canal.on('broadcast', { event: '*' }, function (m) {
-      if (c.fechada || con !== c) return;
+      if (!ativo() || con !== c) return;
       try { receber(c, m.event, m.payload || {}); } catch (erro) { console.error('Mensagem online com problema:', erro); }
     });
     canal.on('presence', { event: 'sync' }, function () {
-      if (c.fechada || con !== c) return;
+      if (!ativo() || con !== c) return;
       presencaMudou(c);
     });
 
     return new Promise(function (resolver, rejeitar) {
       var pronto = false;
-      var relogio = setTimeout(function () {
+      var relogio = primeira ? setTimeout(function () {
         if (!pronto) { pronto = true; rejeitar(new Error('tempo esgotado')); }
-      }, O.TEMPO_CONEXAO * 1000);
+      }, O.TEMPO_CONEXAO * 1000) : null;
       canal.subscribe(function (status, erro) {
-        if (status === 'SUBSCRIBED' && !pronto) {
-          pronto = true;
-          clearTimeout(relogio);
-          resolver(c);
-        } else if ((status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') && !pronto) {
-          pronto = true;
-          clearTimeout(relogio);
-          rejeitar(erro || new Error(status));
-        } else if (pronto && status !== 'SUBSCRIBED' && !c.fechada && con === c) {
-          // Caiu depois de conectado.
-          conexaoCaiu(c);
+        if (c.canal !== canal || c.fechada) return;
+        c.historicoStatus.push(Math.round(performance.now()) + ' ' + status);
+        if (c.historicoStatus.length > 30) c.historicoStatus.shift();
+        if (status === 'SUBSCRIBED') {
+          c.inscrito = true;
+          c.caiuEm = 0;
+          if (!pronto) { pronto = true; clearTimeout(relogio); resolver(c); }
+          if (c.jaConectou) aoReconectar(c);
+          c.jaConectou = true;
+        } else {
+          c.inscrito = false;
+          if (!pronto && primeira) {
+            pronto = true; clearTimeout(relogio);
+            rejeitar(erro || new Error(status));
+            return;
+          }
+          // Caiu depois de conectado (aba congelada, celular bloqueado, rede):
+          // NÃO sai da sala — mostra "Reconectando…" e tenta de novo (vigiarConexao).
+          if (!c.caiuEm) c.caiuEm = Date.now();
+          mostrarReconectando(c, true);
         }
       });
     });
@@ -187,9 +229,159 @@
     });
   }
 
+  /* Anuncia (ou repete) quem eu sou no Presence. */
+  function rastrear(c, dados) {
+    c.presenca = dados;
+    return c.canal.track(dados).catch(function () { /* repete ao reconectar */ });
+  }
+
+  /* Reabre o canal com a mesma identidade. */
+  function reabrir(c) {
+    if (c.fechada || c.reabrindo) return;
+    c.ultimaTentativa = Date.now();
+    c.reabrindo = true;
+    var antigo = c.canal;
+    // Espera o canal velho sair de verdade: se abrir o novo antes, a desconexão
+    // (assíncrona) do velho derruba o novo junto.
+    var remover;
+    try { remover = Promise.resolve(supa.removeChannel(antigo)); } catch (e) { remover = Promise.resolve(); }
+    remover.catch(function () {}).then(function () {
+      c.reabrindo = false;
+      if (c.fechada || c.canal !== antigo) return;
+      abrirCanal(c, false).catch(function () { /* vigiarConexao tenta de novo */ });
+    });
+  }
+
+  /*
+   * Teste de saúde: depois que a página "volta" (descongelou, ficou visível, a
+   * internet voltou), o realtime-js às vezes troca o WebSocket por um novo sem
+   * reinscrever o canal e sem avisar — o canal parece conectado, mas não recebe
+   * nada. Repetimos o anúncio no Presence e esperamos a confirmação do servidor;
+   * sem ela, reabrimos o canal.
+   */
+  function checarSaude(c) {
+    if (!c || c.fechada || !c.jaConectou || !c.presenca || c.reabrindo) return;
+    var canal = c.canal;
+    var tempo = new Promise(function (r) { setTimeout(function () { r('sem resposta'); }, 5000); });
+    Promise.race([canal.track(c.presenca), tempo]).then(function (r) {
+      if (c.fechada || c.canal !== canal || r === 'ok') return;
+      c.inscrito = false;
+      if (!c.caiuEm) c.caiuEm = Date.now();
+      mostrarReconectando(c, true);
+      reabrir(c);
+    }, function () {
+      if (c.fechada || c.canal !== canal) return;
+      c.inscrito = false;
+      if (!c.caiuEm) c.caiuEm = Date.now();
+      reabrir(c);
+    });
+  }
+
+  /* Conectou de novo: volta a aparecer na sala e pede o que perdeu. */
+  function aoReconectar(c) {
+    mostrarReconectando(c, false);
+    if (c.presenca) rastrear(c, c.presenca);
+    var jogo = IT.jogo;
+    if (c.anfitriao) {
+      enviar(c, 'sala', c.sala);
+      if (jogo.rede === c && jogo.estado === 'jogando') enviarSnapshot(c);
+    } else {
+      enviar(c, 'pedirSala', { cid: c.cid });
+      if (c.sala && (c.sala.estado === 'jogando' || c.sala.estado === 'fim')) enviar(c, 'pedirEstado', { cid: c.cid });
+    }
+  }
+
+  /* A cada segundo: reconexão e tolerância de ausências (issue #6). */
+  function vigiarConexao(c) {
+    if (c.fechada || con !== c) return;
+    var agora = Date.now();
+    if (!c.inscrito && c.caiuEm) {
+      if (agora - c.caiuEm > O.TEMPO_DESISTIR * 1000) {
+        sair('A conexão caiu e não voltou. 😕 Confira a internet e entre de novo pela sala.');
+        return;
+      }
+      // Tenta reabrir a cada 4 s — também com a aba em segundo plano (computador e
+      // Android mantêm a conexão viva assim; no celular bloqueado o JS nem roda).
+      if (agora - c.ultimaTentativa > 4000) reabrir(c);
+      return; // desconectado: não julga a ausência dos outros com informação velha
+    }
+    var emPartida = IT.jogo.rede === c && (IT.jogo.estado === 'jogando' || IT.jogo.estado === 'fim');
+    var limite = (emPartida ? O.TOLERANCIA_PARTIDA : O.TOLERANCIA_SALA) * 1000;
+    if (!c.sala) return;
+    if (c.anfitriao) {
+      // Quem saiu há mais que a tolerância sai de vez da sala.
+      var sairam = c.sala.membros.filter(function (m) { return m.ausenteDesde && agora - m.ausenteDesde > limite; });
+      if (sairam.length) {
+        c.sala.membros = c.sala.membros.filter(function (m) { return sairam.indexOf(m) === -1; });
+        c.sala.cpus = Math.min(c.sala.cpus, IT.config.MAX_JOGADORES - c.sala.membros.length);
+        sairam.forEach(function (m) {
+          var texto = m.nome + ' não voltou' + (emPartida ? '. A CPU continua no lugar! 🤖' : '. 👋');
+          IT.ui.mostrarMensagem(texto, 'aviso');
+          enviar(c, 'msg', { texto: texto, tipo: 'aviso', id: 0 });
+        });
+        if (IT.jogo.estado === 'fim' && IT.jogo.rede === c && c.votos) registrarVoto(c, '-');
+        enviar(c, 'sala', c.sala);
+        desenharSala();
+        salvarSessao(c);
+      }
+    } else if (c.anfitriaoAusenteDesde && agora - c.anfitriaoAusenteDesde > limite) {
+      eleger(c);
+    } else if (IT.jogo.estado !== 'jogando' && c.ultimaSalaEm && agora - c.ultimaSalaEm > limite) {
+      // Fora da partida o anfitrião reenvia a sala a cada 3 s. Se isso parou, ele
+      // sumiu — mesmo que o Presence ainda o mostre (aba congelada com o batimento
+      // da conexão rodando num Worker, por exemplo).
+      eleger(c);
+    } else if (IT.jogo.estado !== 'jogando' && c.ultimaSalaEm && agora - c.ultimaSalaEm > 8000 && !c.anfitriaoAusenteDesde) {
+      avisoAusencia(c, 'O anfitrião saiu um pouquinho. Esperando ele voltar… ⏳');
+      c.avisoSinalPerdido = true;
+    } else if (c.avisoSinalPerdido && c.ultimaSalaEm && agora - c.ultimaSalaEm < 8000) {
+      c.avisoSinalPerdido = false;
+      avisoAusencia(c, '');
+    }
+  }
+
+  function mostrarReconectando(c, sim) {
+    var texto = 'Reconectando… 🔄';
+    var jogo = IT.jogo;
+    if (jogo.rede === c && (jogo.estado === 'jogando' || jogo.estado === 'fim')) {
+      if (sim) IT.ui.avisoRede(texto);
+      else if (document.getElementById('aviso-rede').textContent === texto) IT.ui.avisoRede('');
+    } else {
+      if (sim) avisoSala(texto);
+      else if (el.salaAviso.textContent === texto) avisoSala('');
+    }
+  }
+
+  /* ---------- Sessão (recarregar a página volta para a sala) ---------- */
+
+  var CHAVE_SESSAO = 'ilhas-de-tinta:sessao';
+
+  function salvarSessao(c) {
+    if (!c || c.fechada || !c.sala) return;
+    try {
+      sessionStorage.setItem(CHAVE_SESSAO, JSON.stringify({
+        codigo: c.codigo, cid: c.cid, nome: c.nome, anfitriao: c.anfitriao,
+        sala: c.anfitriao ? c.sala : null, quando: Date.now()
+      }));
+    } catch (e) { /* sem armazenamento: só não volta sozinho ao recarregar */ }
+  }
+
+  function lerSessao() {
+    try {
+      var s = JSON.parse(sessionStorage.getItem(CHAVE_SESSAO) || 'null');
+      if (s && Date.now() - s.quando < O.SESSAO_VALE * 1000) return s;
+    } catch (e) { /* ignora */ }
+    return null;
+  }
+
+  function limparSessao() {
+    try { sessionStorage.removeItem(CHAVE_SESSAO); } catch (e) { /* ignora */ }
+  }
+
   function fechar(c) {
     if (!c || c.fechada) return;
     c.fechada = true;
+    clearInterval(c.vigiaConexao);
     c.timers.forEach(function (t) { clearInterval(t); clearTimeout(t); });
     try { supa.removeChannel(c.canal); } catch (e) { /* já fechado */ }
   }
@@ -199,7 +391,9 @@
     var c = con;
     con = null;
     fechar(c);
+    limparSessao();
     IT.ui.avisoRede('');
+    IT.ui.modoEspectador(false);
     var jogo = IT.jogo;
     jogo.rede = null;
     jogo.aoAvisar = null;
@@ -207,10 +401,6 @@
     IT.ui.esconderMensagem();
     jogo.irPara('menu');
     avisoMenu(mensagem || '');
-  }
-
-  function conexaoCaiu(c) {
-    sair('A conexão com a internet caiu. 😕 Tente de novo daqui a pouco.');
   }
 
   /* ---------- Sala de espera ---------- */
@@ -227,24 +417,40 @@
 
   /* Anfitrião: confere quem está presente e atualiza a sala. */
   function presencaMudou(c) {
-    var estado = c.canal.presenceState();
-    var presentes = {};
-    Object.keys(estado).forEach(function (chave) { presentes[chave] = (estado[chave] || [])[0] || {}; });
+    var presentes = presencas(c);
+    var agora = Date.now();
 
     if (!c.anfitriao) {
-      // Cliente: só precisa saber se o anfitrião continua aqui.
-      if (c.sala && presentes[c.sala.anfitriao]) c.vistoAnfitriao = true;
-      if (c.sala && c.vistoAnfitriao && !presentes[c.sala.anfitriao]) eleger(c, presentes);
+      // Cliente: o anfitrião continua aqui? Ausência curta só gera um aviso.
+      if (!c.sala) return;
+      var anf = presentes[c.sala.anfitriao];
+      if (anf && anf.semEstado) {
+        // O anfitrião recarregou a página e perdeu o estado: outro assume já.
+        eleger(c, presentes);
+      } else if (anf) {
+        c.vistoAnfitriao = true;
+        if (c.anfitriaoAusenteDesde) { c.anfitriaoAusenteDesde = 0; avisoAusencia(c, ''); }
+      } else if (c.vistoAnfitriao && !c.anfitriaoAusenteDesde) {
+        c.anfitriaoAusenteDesde = agora;
+        avisoAusencia(c, 'O anfitrião saiu um pouquinho. Esperando ele voltar… ⏳');
+      }
       return;
     }
 
     var sala = c.sala, mudou = false;
-    // Quem saiu.
-    sala.membros = sala.membros.filter(function (m) {
-      if (m.cid === c.cid || presentes[m.cid]) return true;
-      mudou = true;
-      quemSaiuNoMeioDaPartida(c, m);
-      return false;
+    // Quem sumiu: fica "saiu um pouquinho" (a remoção de vez é no vigiarConexao).
+    sala.membros.forEach(function (m) {
+      if (m.cid === c.cid) return;
+      var aqui = !!presentes[m.cid];
+      if (!aqui && !m.ausenteDesde) {
+        m.ausenteDesde = agora;
+        mudou = true;
+        comecouAusencia(c, m);
+      } else if (aqui && m.ausenteDesde) {
+        delete m.ausenteDesde;
+        mudou = true;
+        acabouAusencia(c, m);
+      }
     });
     // Quem chegou.
     Object.keys(presentes).forEach(function (cid) {
@@ -256,38 +462,58 @@
         enviar(c, 'cheia', { cid: cid });
         return;
       }
-      sala.membros.push({
+      var m = {
         cid: cid,
         nome: antigo ? antigo.nome : String(presentes[cid].nome || 'Explorador').slice(0, 12),
         cor: antigo ? antigo.corNome : primeiraCorLivre(sala, presentes[cid].cor, cid)
-      });
-      if (antigo && antigo.eraHumano && IT.jogo.estado === 'jogando') {
-        IT.jogo.devolverParaHumano(antigo);
-        var texto = antigo.nome + ' voltou! 🎉';
-        IT.ui.mostrarMensagem(texto, 'sucesso', antigo.cor.escura);
-        enviar(c, 'msg', { texto: texto, tipo: 'sucesso', id: antigo.id });
-      }
+      };
+      sala.membros.push(m);
+      acabouAusencia(c, m);
       mudou = true;
     });
     sala.cpus = Math.min(sala.cpus, IT.config.MAX_JOGADORES - sala.membros.length);
-    // Alguém saiu na tela de fim: talvez agora todos os que ficaram já votaram na revanche.
-    if (mudou && IT.jogo.estado === 'fim' && IT.jogo.rede === c && c.votos) registrarVoto(c, '-');
     if (mudou) {
       enviar(c, 'sala', sala);
       desenharSala();
+      salvarSessao(c);
     }
   }
 
-  /* Um cliente saiu no meio da partida: a CPU joga por ele até o fim. */
-  function quemSaiuNoMeioDaPartida(c, membro) {
+  /* Cliente: aviso "o anfitrião saiu um pouquinho" (na partida ou na sala de espera). */
+  function avisoAusencia(c, texto) {
     var jogo = IT.jogo;
-    if (jogo.rede !== c || (jogo.estado !== 'jogando')) return;
+    if (jogo.rede === c && (jogo.estado === 'jogando' || jogo.estado === 'fim')) {
+      if (texto || !c.pausaRemota) IT.ui.avisoRede(texto);
+    } else {
+      avisoSala(texto);
+    }
+  }
+
+  /* Anfitrião: alguém sumiu do Presence. Na partida, a CPU segura o explorador. */
+  function comecouAusencia(c, membro) {
+    var jogo = IT.jogo, texto = membro.nome + ' saiu um pouquinho. Esperando voltar… ⏳';
+    if (jogo.rede === c && jogo.estado === 'jogando') {
+      jogo.jogadores.forEach(function (j) {
+        if (j.cid === membro.cid && j.tipo === 'humano') {
+          jogo.transformarEmCPU(j, O.NIVEL_DE_QUEM_SAI);
+          texto = membro.nome + ' saiu um pouquinho ⏳ A CPU segura até voltar!';
+        }
+      });
+    }
+    IT.ui.mostrarMensagem(texto, 'aviso');
+    enviar(c, 'msg', { texto: texto, tipo: 'aviso', id: 0 });
+  }
+
+  /* Anfitrião: quem tinha sumido voltou (ou reapareceu depois de recarregar). */
+  function acabouAusencia(c, membro) {
+    var jogo = IT.jogo;
+    if (jogo.rede !== c || jogo.estado !== 'jogando') return;
     jogo.jogadores.forEach(function (j) {
-      if (j.cid === membro.cid && j.tipo === 'humano') {
-        jogo.transformarEmCPU(j, O.NIVEL_DE_QUEM_SAI);
-        var texto = j.nome + ' saiu. A CPU vai jogar no lugar! 🤖';
-        IT.ui.mostrarMensagem(texto, 'aviso', j.cor.escura);
-        enviar(c, 'msg', { texto: texto, tipo: 'aviso', id: j.id });
+      if (j.cid === membro.cid && j.eraHumano) {
+        jogo.devolverParaHumano(j);
+        var texto = j.nome + ' voltou! 🎉';
+        IT.ui.mostrarMensagem(texto, 'sucesso', j.cor.escura);
+        enviar(c, 'msg', { texto: texto, tipo: 'sucesso', id: j.id });
       }
     });
   }
@@ -325,6 +551,7 @@
       li.innerHTML = '<span class="chip-bolinha"></span><span class="sala-nome"></span><span class="sala-marca"></span>';
       li.querySelector('.sala-nome').textContent = m.nome;
       li.querySelector('.sala-marca').textContent =
+        (m.ausenteDesde ? '⏳ saiu um pouquinho ' : '') +
         (m.cid === sala.anfitriao ? '👑 anfitrião' : '') + (m.cid === c.cid ? ' (você)' : '');
       el.salaJogadores.appendChild(li);
     });
@@ -424,7 +651,7 @@
           membros: [{ cid: c.cid, nome: nome, cor: 'rosa' }],
           cpus: 0, nivel: 'medio', estado: 'espera', rodada: 0
         };
-        return c.canal.track({ nome: nome, cor: 'rosa', papel: 'anfitriao' })
+        return rastrear(c, { nome: nome, cor: 'rosa', papel: 'anfitriao' })
           .then(function () { return esperar(800); })
           .then(function () {
             // Código já usado por outra sala? (muito raro) Tenta outro.
@@ -442,11 +669,12 @@
       ocupado(false);
       avisoOnline('');
       avisoSala('');
+      salvarSessao(c);
       IT.jogo.irPara('sala');
       presencaMudou(c);
       desenharSala();
       // De tempos em tempos reenvia a sala (para quem chegou e perdeu alguma mensagem).
-      c.timers.push(setInterval(function () { if (c.sala.estado === 'espera') enviar(c, 'sala', c.sala); }, 3000));
+      c.timers.push(setInterval(function () { if (c.sala.estado !== 'jogando') enviar(c, 'sala', c.sala); }, 3000));
     }).catch(function (erro) {
       console.warn('Não foi possível criar a sala:', erro);
       ocupado(false);
@@ -466,7 +694,7 @@
 
     conectar(codigo, false, nome).then(function (c) {
       con = c;
-      return c.canal.track({ nome: nome, cor: null, papel: 'jogador' }).then(function () {
+      return rastrear(c, { nome: nome, cor: null, papel: 'jogador' }).then(function () {
         enviar(c, 'pedirSala', { cid: c.cid });
         // Se o anfitrião não responder logo, a sala não existe.
         c.timers.push(setTimeout(function () {
@@ -523,8 +751,30 @@
     // Cada vaga humana: joga aqui só o próprio anfitrião; os outros, pela rede.
     configuracao.vagas.forEach(function (v) { v.local = v.cid === c.cid || v.tipo === 'cpu'; });
     jogo.jogar(configuracao);
+    c.configuracaoAtual = JSON.parse(JSON.stringify(configuracao));
+    // Quem saiu um pouquinho começa com a CPU segurando o explorador.
+    c.sala.membros.forEach(function (m) {
+      if (!m.ausenteDesde) return;
+      jogo.jogadores.forEach(function (j) { if (j.cid === m.cid) jogo.transformarEmCPU(j, O.NIVEL_DE_QUEM_SAI); });
+    });
     enviarSnapshot(c);
     transmitir(c);
+    salvarSessao(c);
+  }
+
+  /* Anfitrião: estado completo para quem voltou, recarregou ou chegou no meio. */
+  function enviarEstadoCompleto(c, cid) {
+    var jogo = IT.jogo;
+    if (jogo.rede !== c || (jogo.estado !== 'jogando' && jogo.estado !== 'fim')) return;
+    var g = jogo.grade;
+    var config = JSON.parse(JSON.stringify(c.configuracaoAtual || jogo.configuracao));
+    config.vagas.forEach(function (v) { delete v.local; });
+    enviar(c, 'estadoCompleto', {
+      para: cid, r: c.rodada, configuracao: config, estadoJogo: jogo.estado,
+      s: c.seq, t: Math.round(jogo.tempoRestante * 10) / 10, j: resumoJogadores(),
+      d: Array.prototype.join.call(g.donos, ''), k: Array.prototype.join.call(g.rastros, ''),
+      ranking: jogo.estado === 'fim' ? jogo.ranking().map(function (r) { return [r.jogador.id, r.celulas]; }) : null
+    });
   }
 
   /* Anfitrião: avisos e fim da partida vão para todos os aparelhos. */
@@ -555,7 +805,7 @@
       if (envios % porSnapshot === 0) enviarSnapshot(c);
       else enviarEstado(c);
     }, 1000 / O.ENVIOS_POR_SEGUNDO));
-    c.timers.push(setInterval(function () { if (c.sala.estado === 'espera') enviar(c, 'sala', c.sala); }, 3000));
+    c.timers.push(setInterval(function () { if (c.sala.estado !== 'jogando') enviar(c, 'sala', c.sala); }, 3000));
   }
 
   /* ---------- Troca de anfitrião ---------- */
@@ -587,6 +837,9 @@
     c.vistoAnfitriao = true;
     c.ultimaMensagemEm = Date.now();
     c.foraDesde = 0;
+    c.anfitriaoAusenteDesde = 0;
+    c.ultimaSalaEm = Date.now();
+    c.avisoSinalPerdido = false;
     if (novo.cid === c.cid) {
       assumir(c, antigo);
     } else {
@@ -608,11 +861,13 @@
     var jogo = IT.jogo;
     c.anfitriao = true;
     c.motivoPausa = 0;
+    c.pausaRemota = 0;
+    c.foraDesde = 0;
     c.votos = {};
     c.sala.anfitriao = c.cid;
     c.sala.membros = c.sala.membros.filter(function (m) { return m.cid !== antigo; });
     var eu = c.sala.membros.filter(function (m) { return m.cid === c.cid; })[0];
-    c.canal.track({ nome: c.nome, cor: eu ? eu.cor : null, papel: 'anfitriao' }).catch(function () {});
+    rastrear(c, { nome: c.nome, cor: eu ? eu.cor : null, papel: 'anfitriao' });
 
     if (jogo.rede === c && (jogo.estado === 'jogando' || jogo.estado === 'fim')) {
       jogo.jogadores.forEach(function (j) {
@@ -638,7 +893,9 @@
       transmitir(c);
       desenharSala();
     }
+    c.configuracaoAtual = c.configuracaoAtual || JSON.parse(JSON.stringify(jogo.configuracao));
     enviar(c, 'sala', c.sala);
+    salvarSessao(c);
     var texto = c.nome + ' agora é o anfitrião 👑';
     IT.ui.mostrarMensagem(texto, 'sucesso');
     enviar(c, 'msg', { texto: texto, tipo: 'sucesso', id: 0 });
@@ -677,14 +934,17 @@
       vigiarAnfitriao(c);
     }
     IT.ui.mostrarMensagem('Você ficou fora e outro jogador virou o anfitrião. Pode continuar jogando! 🙂', 'aviso');
+    // Voltou na tela de pausa ("todo mundo esperando você")? Agora não é mais assim.
+    if (jogo.menuAberto) IT.ui.configurarPausa('Bem-vindo de volta! 👋', 'Outro jogador virou o anfitrião enquanto você estava fora. Toque em Continuar para jogar!');
     desenharSala();
+    salvarSessao(c);
   }
 
   /* Avisa a sala que estou aqui como jogador (o anfitrião devolve meu explorador). */
   function voltarComoJogador(c) {
     c.esperandoVoltar = false;
     var eu = c.sala.membros.filter(function (m) { return m.cid === c.cid; })[0];
-    c.canal.track({ nome: c.nome, cor: eu ? eu.cor : null, papel: 'jogador' }).catch(function () {});
+    rastrear(c, { nome: c.nome, cor: eu ? eu.cor : null, papel: 'jogador' });
   }
 
   /* A mensagem veio de um anfitrião de uma eleição mais nova que a minha? */
@@ -838,8 +1098,9 @@
       var jogo = IT.jogo;
       if (con !== c || c.anfitriao || jogo.rede !== c || jogo.estado !== 'jogando') return;
       // Anfitrião fora da tela há muito tempo (ou sumiu de vez): o próximo assume.
-      var foraMuito = c.pausaRemota === 'fora' && c.foraDesde && Date.now() - c.foraDesde > O.TEMPO_ANFITRIAO_FORA * 1000;
-      var mudo = Date.now() - c.ultimaMensagemEm > O.TEMPO_ANFITRIAO_MUDO * 1000;
+      if (!c.inscrito) return; // eu é que estou sem conexão: não julgo o anfitrião
+      var foraMuito = c.pausaRemota === 'fora' && c.foraDesde && Date.now() - c.foraDesde > O.TOLERANCIA_PARTIDA * 1000;
+      var mudo = Date.now() - c.ultimaMensagemEm > O.TOLERANCIA_PARTIDA * 1000;
       if (foraMuito || mudo) { eleger(c); return; }
       var parado = Date.now() - c.ultimaMensagemEm > 2500;
       if (parado && !c.pausaRemota) mostrarPausaRemota(c, 'lento');
@@ -850,6 +1111,8 @@
   function comecarComoCliente(c, p) {
     var configuracao = p.configuracao;
     configuracao.vagas.forEach(function (v) { v.local = v.cid === c.cid; });
+    // Chegou no meio da partida: assiste até a próxima (issue #9).
+    c.espectador = !configuracao.vagas.some(function (v) { return v.cid === c.cid; });
     c.rodada = p.r;
     c.ultimoSeq = -1;
     var jogo = IT.jogo;
@@ -858,6 +1121,7 @@
     jogo.aoFim = null;
     c.ultimaMensagemEm = Date.now();
     jogo.jogar(configuracao, { semIA: true });
+    IT.ui.modoEspectador(c.espectador);
     avisoSala('');
     if (!c.vigiando) { c.vigiando = true; vigiarAnfitriao(c); }
   }
@@ -895,6 +1159,9 @@
         });
       } else if (evento === 'pedirSnap') {
         if (jogo.rede === c && jogo.estado === 'jogando') enviarSnapshot(c);
+      } else if (evento === 'pedirEstado') {
+        enviar(c, 'sala', c.sala);
+        enviarEstadoCompleto(c, p.cid);
       } else if (evento === 'revanche') {
         registrarVoto(c, p.cid);
       }
@@ -903,6 +1170,7 @@
 
     // Cliente.
     if (evento === 'sala') {
+      c.ultimaSalaEm = Date.now(); // "sinal de vida" do anfitrião fora da partida
       var primeira = !c.sala;
       c.sala = p;
       c.vistoAnfitriao = c.vistoAnfitriao || !!c.canal.presenceState()[p.anfitriao];
@@ -915,8 +1183,17 @@
           avisoOnline('Essa sala já está cheia (4 jogadores). 🙈');
           return;
         }
+        if (c.voltando) { avisoSala('Você voltou para a sala! 🎉'); c.voltando = false; }
         jogo.irPara('sala');
       }
+      // Partida em andamento e eu ainda não estou nela (cheguei no meio ou voltei):
+      // peço o estado completo — quem não estava na partida assiste até a próxima.
+      var foraDoJogo = jogo.rede !== c || (jogo.estado !== 'jogando' && jogo.estado !== 'fim') || c.rodada !== p.rodada;
+      if ((p.estado === 'jogando' || p.estado === 'fim') && foraDoJogo && Date.now() - (c.pediuEstadoEm || 0) > 2000) {
+        c.pediuEstadoEm = Date.now();
+        enviar(c, 'pedirEstado', { cid: c.cid });
+      }
+      salvarSessao(c);
       desenharSala();
     } else if (evento === 'cheia') {
       if (p.cid !== c.cid) return;
@@ -926,6 +1203,18 @@
     } else if (evento === 'inicio') {
       if (!c.sala || !p.configuracao.vagas.some(function (v) { return v.cid === c.cid; })) return;
       comecarComoCliente(c, p);
+    } else if (evento === 'estadoCompleto') {
+      if (p.para !== c.cid) return;
+      comecarComoCliente(c, { r: p.r, configuracao: p.configuracao });
+      aplicarEstado(c, { r: p.r, s: p.s, t: p.t, j: p.j, d: p.d, k: p.k }, true);
+      aplicarJogadores(p.j);
+      jogo.tempoRestante = p.t;
+      IT.ui.atualizarHUD(jogo);
+      if (p.estadoJogo === 'fim' && p.ranking) jogo.mostrarFimRemoto(p.ranking, false);
+      // Quem recarregou a página como anfitrião volta a ser um jogador comum.
+      if (c.presenca && c.presenca.semEstado) {
+        rastrear(c, { nome: c.nome, cor: c.presenca.cor, papel: 'jogador' });
+      }
     } else if (evento === 'estado') {
       aplicarEstado(c, p, false);
     } else if (evento === 'snap') {
@@ -948,6 +1237,8 @@
       }
     } else if (evento === 'voltarSala') {
       IT.ui.avisoRede('');
+      IT.ui.modoEspectador(false);
+      c.espectador = false;
       jogo.rede = null;
       jogo.irPara('sala');
       desenharSala();
@@ -1010,7 +1301,26 @@
       $('sala-convidar').addEventListener('click', convidar);
       window.addEventListener('beforeunload', function () { fechar(con); });
       document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'visible' && con && con.esperandoVoltar) voltarComoJogador(con);
+        if (document.visibilityState !== 'visible' || !con) return;
+        if (con.esperandoVoltar) voltarComoJogador(con);
+        if (!con.inscrito && con.jaConectou) reabrir(con); else checarSaude(con);
+      });
+      // Voltou a internet, ou a página voltou do "congelamento" (resume): confere a
+      // conexão e reconecta se precisar.
+      ['online', 'pageshow'].forEach(function (evento) {
+        window.addEventListener(evento, function () {
+          if (!con) return;
+          if (!con.inscrito && con.jaConectou) reabrir(con); else checarSaude(con);
+        });
+      });
+      document.addEventListener('resume', function () { if (con) checarSaude(con); });
+      // O navegador avisou que a internet caiu: mostra "Reconectando…" na hora
+      // (o WebSocket às vezes demora para perceber sozinho).
+      window.addEventListener('offline', function () {
+        if (!con || !con.jaConectou) return;
+        con.inscrito = false;
+        if (!con.caiuEm) con.caiuEm = Date.now();
+        mostrarReconectando(con, true);
       });
     },
 
@@ -1036,6 +1346,56 @@
     },
 
     linkDaSala: linkDaSala,
+
+    /*
+     * Página recarregada (ou reaberta) durante uma sala: volta para ela com a
+     * mesma identidade. Se ninguém responder e eu era o anfitrião da sala de
+     * espera, a sala continua comigo.
+     */
+    retomarSessao: function () {
+      var sessao = lerSessao();
+      if (!sessao || con || motivoIndisponivel()) return false;
+      IT.online.abrir();
+      avisoOnline('Voltando para a sala ' + sessao.codigo + '… 🔄');
+      ocupado(true);
+      conectar(sessao.codigo, false, sessao.nome, sessao.cid).then(function (c) {
+        con = c;
+        c.voltando = true;
+        // semEstado: eu era o anfitrião e perdi o jogo ao recarregar → outro assume.
+        return rastrear(c, { nome: sessao.nome, cor: null, papel: 'jogador', semEstado: !!sessao.anfitriao }).then(function () {
+          enviar(c, 'pedirSala', { cid: c.cid });
+          c.timers.push(setTimeout(function () { if (con === c && !c.sala) enviar(c, 'pedirSala', { cid: c.cid }); }, 1500));
+          c.timers.push(setTimeout(function () {
+            if (con !== c || c.sala) return;
+            if (sessao.anfitriao && sessao.sala) {
+              // Ninguém mais na sala: continuo sendo o anfitrião (sala de espera).
+              c.anfitriao = true;
+              c.sala = sessao.sala;
+              c.sala.estado = 'espera';
+              c.sala.anfitriao = c.cid;
+              rastrear(c, { nome: sessao.nome, cor: 'rosa', papel: 'anfitriao' });
+              ocupado(false);
+              avisoOnline('');
+              IT.jogo.irPara('sala');
+              transmitir(c);
+              presencaMudou(c);
+              desenharSala();
+              avisoSala('Você voltou para a sua sala! 🎉');
+              salvarSessao(c);
+            } else {
+              sair('');
+              IT.jogo.irPara('online');
+              ocupado(false);
+              avisoOnline('A sala ' + sessao.codigo + ' acabou. Que tal criar uma nova? 🙂');
+            }
+          }, O.TEMPO_PROCURAR_SALA * 1000));
+        });
+      }).catch(function () {
+        ocupado(false);
+        avisoOnline('Não consegui voltar para a sala agora. 😕 Tente entrar de novo.');
+      });
+      return true;
+    },
 
     /* Usado nos testes. */
     conexao: function () { return con; },
