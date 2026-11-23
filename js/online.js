@@ -25,6 +25,12 @@
  *   fim       anfitrião → todos   ranking final
  *   voltarSala anfitrião → todos  todos voltam para a sala de espera
  *   dir       cliente → anfitrião  nova direção do explorador do cliente
+ *   pausa     anfitrião → todos   partida pausada (motivo: 'menu' ou 'fora' = saiu da tela)
+ *   retomar   anfitrião → todos   partida continua
+ *
+ * Se o anfitrião sai da tela (bloqueou o celular, trocou de app), a partida
+ * PAUSA e os outros veem "O anfitrião saiu da tela, esperando…". Se nenhuma
+ * mensagem chega por alguns segundos, os outros veem "Esperando o anfitrião…".
  */
 (function (IT) {
   'use strict';
@@ -116,7 +122,12 @@
       // Usados pelo game.js através de jogo.rede:
       direcionar: MetodosRede.direcionar,
       jogarDeNovo: MetodosRede.jogarDeNovo,
-      mudarJogadores: MetodosRede.mudarJogadores
+      mudarJogadores: MetodosRede.mudarJogadores,
+      pausar: MetodosRede.pausar,
+      retomar: MetodosRede.retomar,
+      motivoPausa: 0,          // anfitrião: por que está pausado (0 = não está)
+      pausaRemota: 0,          // cliente: o anfitrião avisou que pausou
+      ultimaMensagemEm: 0      // cliente: quando chegou o último estado
     };
     var canal = clienteSupabase().channel('ilhas-de-tinta-' + codigo, {
       config: { broadcast: { self: false }, presence: { key: c.cid } }
@@ -173,6 +184,7 @@
     var c = con;
     con = null;
     fechar(c);
+    IT.ui.avisoRede('');
     var jogo = IT.jogo;
     jogo.rede = null;
     jogo.aoAvisar = null;
@@ -424,7 +436,7 @@
     if (motivo) { avisoOnline(motivo); return; }
     var codigo = normalizarCodigo(el.codigo.value);
     if (!codigo) { avisoOnline('Digite o código da sala, por exemplo ' + O.PREFIXO_CODIGO + '-1234.'); return; }
-    el.codigo.value = codigo;
+    el.codigo.value = codigo.split('-')[1];
     var nome = lerNome();
     ocupado(true);
     avisoOnline('Procurando a sala ' + codigo + '… 🔎');
@@ -530,7 +542,7 @@
       }
     }
     enviar(c, 'estado', {
-      r: c.rodada, s: c.seq++,
+      r: c.rodada, s: c.seq++, pa: IT.jogo.pausado ? c.motivoPausa || 'menu' : 0,
       t: Math.round(IT.jogo.tempoRestante * 10) / 10,
       j: resumoJogadores(),
       c: mudancas
@@ -586,12 +598,36 @@
       }
     }
     c.ultimoSeq = Math.max(c.ultimoSeq, p.s);
+    c.ultimaMensagemEm = Date.now();
+    if (!foto) mostrarPausaRemota(c, p.pa || 0);
     if (jogo.estado === 'jogando') {
       aplicarJogadores(p.j);
       jogo.tempoRestante = p.t;
       IT.ui.atualizarHUD(jogo);
       IT.ui.atualizarRelogio(p.t);
     }
+  }
+
+  var TEXTOS_PAUSA = {
+    fora: 'O anfitrião saiu da tela. Esperando ele voltar… ⏳',
+    menu: 'O anfitrião pausou o jogo. ⏸',
+    lento: 'Esperando o anfitrião… ⏳'
+  };
+
+  function mostrarPausaRemota(c, motivo) {
+    c.pausaRemota = motivo || 0;
+    IT.ui.avisoRede(motivo ? TEXTOS_PAUSA[motivo] || TEXTOS_PAUSA.menu : '');
+  }
+
+  /* Cliente: se as mensagens do anfitrião param de chegar, avisa. */
+  function vigiarAnfitriao(c) {
+    c.timers.push(setInterval(function () {
+      var jogo = IT.jogo;
+      if (con !== c || jogo.rede !== c || jogo.estado !== 'jogando') return;
+      var parado = Date.now() - c.ultimaMensagemEm > 2500;
+      if (parado && !c.pausaRemota) mostrarPausaRemota(c, 'lento');
+      else if (!parado && c.pausaRemota === 'lento') mostrarPausaRemota(c, 0);
+    }, 500));
   }
 
   function comecarComoCliente(c, p) {
@@ -603,8 +639,10 @@
     jogo.rede = c;
     jogo.aoAvisar = null;
     jogo.aoFim = null;
+    c.ultimaMensagemEm = Date.now();
     jogo.jogar(configuracao, { semIA: true });
     avisoSala('');
+    if (!c.vigiando) { c.vigiando = true; vigiarAnfitriao(c); }
   }
 
   /* ---------- Mensagens recebidas ---------- */
@@ -666,10 +704,16 @@
       if (jogo.rede !== c) return;
       var j = p.id ? jogo.jogadorPorId(p.id) : null;
       IT.ui.mostrarMensagem(p.texto, p.tipo, j ? j.cor.escura : null);
+      jogo.vibrarPara(j, p.tipo);
+    } else if (evento === 'pausa') {
+      if (jogo.rede === c) { c.ultimaMensagemEm = Date.now(); mostrarPausaRemota(c, p.motivo || 'menu'); }
+    } else if (evento === 'retomar') {
+      if (jogo.rede === c) { c.ultimaMensagemEm = Date.now(); mostrarPausaRemota(c, 0); }
     } else if (evento === 'fim') {
       if (jogo.rede !== c || p.r !== c.rodada || jogo.estado !== 'jogando') return;
       jogo.mostrarFimRemoto(p.ranking, p.porTempo);
     } else if (evento === 'voltarSala') {
+      IT.ui.avisoRede('');
       jogo.rede = null;
       jogo.irPara('sala');
       desenharSala();
@@ -726,14 +770,22 @@
   var MetodosRede = {
     direcionar: function (direcao) {
       var c = this;
-      if (c.anfitriao) {
-        var meu = IT.jogo.jogadores.filter(function (j) { return j.cid === c.cid && j.tipo === 'humano'; })[0];
-        if (!meu) return false;
-        meu.explorador.pedirDirecao(direcao);
-      } else {
-        enviar(c, 'dir', { cid: c.cid, d: DIRS.indexOf(direcao) });
-      }
+      var meu = IT.jogo.jogadores.filter(function (j) { return j.cid === c.cid && j.tipo === 'humano'; })[0];
+      if (!meu) return false;
+      if (c.anfitriao) return meu.explorador.pedirDirecao(direcao);
+      // Cliente: meia-volta é recusada aqui mesmo (o anfitrião também recusaria).
+      var e = meu.explorador;
+      if (e.direcao && IT.OPOSTA[e.direcao] === direcao) return false;
+      enviar(c, 'dir', { cid: c.cid, d: DIRS.indexOf(direcao) });
       return true;
+    },
+    pausar: function (motivo) {
+      this.motivoPausa = motivo;
+      enviar(this, 'pausa', { motivo: motivo });
+    },
+    retomar: function () {
+      this.motivoPausa = 0;
+      enviar(this, 'retomar', {});
     },
     jogarDeNovo: function () {
       if (this.anfitriao) comecarPartida();
