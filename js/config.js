@@ -70,8 +70,9 @@ window.IlhasDeTinta = window.IlhasDeTinta || {};
     facil:   { nome: 'Fácil',   velocidade: 0.6 },
     medio:   { nome: 'Médio',   velocidade: 0.72 },
     dificil: { nome: 'Difícil', velocidade: 0.78 },
-    // Desafio 😈: anda na mesma velocidade de uma pessoa e tenta te atrapalhar (veja ai.js).
-    desafio: { nome: 'Desafio 😈', velocidade: 1 }
+    // Impossível 😈: anda na mesma velocidade de uma pessoa e tenta te atrapalhar (veja ai.js).
+    // (rotulo = texto do botão; o 😈 sobre a cabeça fica reservado para "está caçando")
+    desafio: { nome: 'Impossível', rotulo: 'Impossível 😈', velocidade: 1 }
   };
 
   /*

@@ -297,9 +297,9 @@ atualização chegar.
 | Fácil | 60% | voltas pequenas e, às vezes, vira para um lado qualquer |
 | Médio | 72% | voltas médias; volta para casa se o rastro ficar longo ou se alguém chegar perto |
 | Difícil | 78% | compara várias voltas e escolhe a maior e mais segura; persegue rastros de adversários que estejam perto (com uma pausa entre uma caçada e outra) |
-| Desafio 😈 | 100% | tenta te atrapalhar: caça seu rastro com previsão, vigia, rouba território e não deixa brecha (veja abaixo) |
+| Impossível 😈 | 100% | tenta te atrapalhar: caça seu rastro com previsão, vigia, rouba território e não deixa brecha (veja abaixo) |
 
-### Desafio 😈 (nível extra)
+### Impossível 😈 (nível extra)
 
 O "cérebro" que **tenta te atrapalhar**. Anda na **mesma velocidade** que
 você e:
@@ -315,17 +315,17 @@ você e:
 
 Para continuar justo para crianças: prefere caçar **humanos** (numa partida só
 de CPUs, caça quem estiver perto), mostra um **😈 em cima da cabeça quando está
-caçando** (dá tempo de fugir) e tem um **respiro de 2,5 s** depois de cortar
+caçando ou de olho em você** (dá tempo de fugir) e tem um **respiro de 2,5 s** depois de cortar
 alguém. Os ajustes ficam em `NIVEIS.desafio` (`js/ai.js`).
 
 Medido na simulação (partidas de 2 min, um "humano robô" na velocidade de
 gente contra a CPU): o Difícil corta o rastro do robô 0,2–0,5 vez por partida;
-o Desafio corta **9 a 12 vezes** e derruba o território dele de ~30% para
+o Impossível corta **9 a 12 vezes** e derruba o território dele de ~30% para
 15–23%. Mas jogando com estratégia — **voltas curtas e voltar para casa quando
-o 😈 chega perto** — o robô "esperto" vence o Desafio em 2 de 6 partidas (a
+o 😈 chega perto** — o robô "esperto" vence o Impossível em 2 de 6 partidas (a
 mesma taxa que tem contra o Difícil).
 
-![Desafio caçando](docs/screenshots/celular-desafio-cacando.png)
+![Impossível caçando](docs/screenshots/celular-impossivel-cacando.png)
 
 A CPU planeja voltas em forma de retângulo e, a cada passo, só aceita
 direções que ainda têm um caminho de volta para casa sem cruzar o próprio

@@ -20,7 +20,7 @@
       python3 -m http.server   →   http://localhost:8000/tests/online.html
     Opções: ?jogadores=4 (4 humanos online)   ?tempo=25 (segundos de partida)
             ?parar=sala|partida|fim (para no meio, para tirar fotos)   ?grande=1
-            ?nivel=0..3 (nível da CPU com 2 jogadores: Fácil, Médio, Difícil, Desafio)
+            ?nivel=0..3 (nível da CPU com 2 jogadores: Fácil, Médio, Difícil, Impossível)
 
     Roteiro: o J1 cria a sala, os outros entram com o código, alguém troca de
     cor, o anfitrião completa com CPU (com 2 jogadores) e aperta Jogar; todos
@@ -251,7 +251,7 @@
       }, (TEMPO + 25) * 1000, 'ranking').then(function () {
         clearInterval(teclas);
         var temDesafio = IT(0).jogo.jogadores.some(function (j) { return j.dificuldade === 'desafio'; });
-        if (temDesafio) verificar(viuCacada, nome + ': o cliente viu o aviso 😈 da CPU Desafio caçando');
+        if (temDesafio) verificar(viuCacada, nome + ': o cliente viu o aviso 😈 da CPU Impossível caçando');
         var r0 = rankingTexto(0);
         verificar(true, nome + ': ranking apareceu em todas as janelas: ' + r0);
         for (var i = 1; i < N; i++) verificar(rankingTexto(i) === r0, nome + ': ranking igual na janela de ' + NOMES[i]);

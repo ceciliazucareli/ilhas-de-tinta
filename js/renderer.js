@@ -293,7 +293,7 @@
 
     if (modo === 'multi') desenharEtiqueta(j.nome, cx, cy - r * 1.55, j.cor.escura);
 
-    // Desafio 😈 caçando alguém: aviso bem visível, para dar tempo de fugir.
+    // Impossível 😈 caçando alguém: aviso bem visível, para dar tempo de fugir.
     if (j.cacando) {
       var balanco = Math.sin(tempo * 10) * 2;
       ctx.font = Math.round(r * 1.5) + 'px sans-serif';

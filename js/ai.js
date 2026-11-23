@@ -19,7 +19,7 @@
  *             rastros de adversários que estejam perto. É um pouco mais lenta
  *             que um humano e espera um tempo entre uma caçada e outra, para
  *             continuar possível de vencer.
- *   Desafio 😈 — o "cérebro" que tenta te atrapalhar (veja decidirDesafio):
+ *   Impossível 😈 — o "cérebro" que tenta te atrapalhar (veja decidirDesafio):
  *             anda na sua velocidade; CAÇA com previsão (vai ao ponto do seu
  *             rastro — ou do caminho que você vai fazer para voltar — onde chega
  *             ANTES de você chegar em casa); VIGIA quando você sai de casa;
@@ -56,7 +56,7 @@
       profundidade: [3, 6], lado: [3, 7], candidatos: 8,
       acaso: 0, seguro: true,
       rastroMax: 22, medo: 0,
-      caca: 0,             // a caçada do Desafio é a de decidirDesafio (com previsão)
+      caca: 0,             // a caçada do Impossível é a de decidirDesafio (com previsão)
       estrategista: true,  // liga decidirDesafio
       alcance: 18,         // até quantos passos vai atrás de um rastro / caminho de volta
       respiro: 2.5,        // segundos sem caçar depois de cortar alguém
@@ -82,7 +82,7 @@
     this.jogo = jogo;
     this.nivel = NIVEIS[jogador.dificuldade] || NIVEIS.medio;
     this.plano = [];         // pontos de passagem {x, y}
-    this.modo = 'casa';      // 'casa' | 'sair' | 'voltar' | 'cacar' | 'vigiar' (Desafio)
+    this.modo = 'casa';      // 'casa' | 'sair' | 'voltar' | 'cacar' | 'vigiar' (Impossível)
     this.descansoCaca = 0;   // momento (s) a partir do qual pode caçar de novo
   }
 
@@ -191,7 +191,7 @@
     return ganho;
   };
 
-  /* Quanto vale tomar uma célula de cada jogador (Desafio: humanos e o líder valem mais). */
+  /* Quanto vale tomar uma célula de cada jogador (Impossível: humanos e o líder valem mais). */
   Cerebro.prototype.pesosDeRoubo = function () {
     var pesos = {}, eu = this.jogador, grade = this.jogo.grade;
     if (!this.nivel.estrategista) return pesos;
@@ -238,7 +238,7 @@
     return caminho[caminho.length - 1];
   };
 
-  /* ---------- Desafio 😈: prever, caçar, vigiar e não deixar brecha ---------- */
+  /* ---------- Impossível 😈: prever, caçar, vigiar e não deixar brecha ---------- */
 
   /* Distância (em passos) daqui até cada célula do mapa, sem pisar em "bloqueada". */
   Cerebro.prototype.mapaDeDistancias = function (x0, y0, bloqueada) {
@@ -269,7 +269,7 @@
       function (x, y) { return g.rastro(x, y) === j.id; }) || null;
   };
 
-  /* Quem o Desafio persegue: os humanos (se houver) — senão, qualquer adversário. */
+  /* Quem o Impossível persegue: os humanos (se houver) — senão, qualquer adversário. */
   Cerebro.prototype.alvosDeCaca = function () {
     var eu = this.jogador;
     var outros = this.jogo.jogadores.filter(function (j) { return j !== eu; });
@@ -344,7 +344,7 @@
     return melhor;
   };
 
-  /* Escolhe o modo do Desafio a cada célula (o movimento seguro é o de sempre). */
+  /* Escolhe o modo do Impossível a cada célula (o movimento seguro é o de sempre). */
   Cerebro.prototype.decidirDesafio = function (rastro, emCasa) {
     var n = this.nivel, e = this.jogador.explorador, agora = this.jogo.ultimoTempo, self = this;
     // Acabou de cortar alguém? Respiro curto antes de caçar de novo.
@@ -397,12 +397,16 @@
       else if (this.plano.length === 0 && this.modo !== 'cacar') this.modo = 'voltar';
     }
 
-    // Desafio 😈: prever, caçar, vigiar e não deixar brecha.
+    // Impossível 😈: prever, caçar, vigiar e não deixar brecha.
     if (n.estrategista) {
       this.decidirDesafio(rastro, emCasa);
       if (rastro > 0 && this.modo === 'sair' && !this.plano.length) this.modo = 'voltar';
     }
-    this.jogador.cacando = this.modo === 'cacar'; // mostra 😈 em cima da cabeça
+    // Mostra 😈 em cima da cabeça enquanto caça ou vigia alguém — e por pelo menos
+    // 1,2 s, para o aviso não ficar piscando e dar tempo de a criança perceber.
+    var agoraAviso = this.jogo.ultimoTempo;
+    if (this.modo === 'cacar' || this.modo === 'vigiar') this.avisoAte = agoraAviso + 1.2;
+    this.jogador.cacando = agoraAviso < (this.avisoAte || 0);
 
     // Difícil: caça rastros de adversários que estejam perto.
     if (this.modo !== 'voltar' && !n.estrategista) {

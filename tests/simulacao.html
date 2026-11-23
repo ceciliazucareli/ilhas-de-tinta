@@ -45,18 +45,18 @@
       { nome: '3 CPUs (Fácil, Médio, Difícil)', vagas: [cpu('rosa', 'facil', 'Fácil'), cpu('azul', 'medio', 'Médio'), cpu('amarelo', 'dificil', 'Difícil')] },
       { nome: '4 CPUs (Fácil, Médio, Difícil, Difícil)', vagas: [cpu('rosa', 'facil', 'Fácil'), cpu('azul', 'medio', 'Médio'), cpu('amarelo', 'dificil', 'Difícil A'), cpu('roxo', 'dificil', 'Difícil B')] },
       { nome: '4 CPUs Médio', vagas: [cpu('rosa', 'medio', 'M1'), cpu('azul', 'medio', 'M2'), cpu('amarelo', 'medio', 'M3'), cpu('roxo', 'medio', 'M4')] },
-      { nome: '1 CPU Desafio + 3 CPUs (Desafio contra CPUs)', vagas: [cpu('rosa', 'desafio', 'Desafio'), cpu('azul', 'medio', 'Médio'), cpu('amarelo', 'dificil', 'Difícil'), cpu('roxo', 'facil', 'Fácil')] }
+      { nome: '1 CPU Impossível + 3 CPUs (Impossível contra CPUs)', vagas: [cpu('rosa', 'desafio', 'Impossível'), cpu('azul', 'medio', 'Médio'), cpu('amarelo', 'dificil', 'Difícil'), cpu('roxo', 'facil', 'Fácil')] }
     ];
 
     // "Humano robô": uma pessoa de mentira (tipo humano, velocidade de gente)
-    // controlada por um cérebro de CPU, para medir o Desafio contra "pessoas".
+    // controlada por um cérebro de CPU, para medir o Impossível contra "pessoas".
     //   cuidadoso = cérebro Médio (volta quando alguém chega perto)
     //   descuidado = cérebro Fácil (voltas pequenas, vira ao acaso às vezes)
     //   esperto    = voltas curtas e volta para casa quando alguém chega perto
-    //                (o que uma criança aprende a fazer contra o Desafio 😈)
+    //                (o que uma criança aprende a fazer contra o Impossível 😈)
     function robo(cor, perfil, nome) { return { tipo: 'humano', cor: cor, nome: nome, robo: perfil }; }
     var REPETICOES = +(params.get('repeticoes') || 4);
-    [['dificil', 'Difícil'], ['desafio', 'Desafio']].forEach(function (nivel) {
+    [['dificil', 'Difícil'], ['desafio', 'Impossível']].forEach(function (nivel) {
       [['medio', 'cuidadoso'], ['facil', 'descuidado'], ['esperto', 'esperto']].forEach(function (perfil) {
         for (var r = 0; r < REPETICOES; r++) {
           CENARIOS.push({

@@ -113,7 +113,7 @@
     if (cpusSimples > 0) {
       var nivel = linha('Nível');
       Object.keys(IT.DIFICULDADES).forEach(function (chave) {
-        nivel.appendChild(botao(IT.DIFICULDADES[chave].nome, 'opcao', vagas[1].dificuldade === chave,
+        nivel.appendChild(botao(IT.DIFICULDADES[chave].rotulo || IT.DIFICULDADES[chave].nome, 'opcao', vagas[1].dificuldade === chave,
           'nivelS' + chave, function () { vagas[1].dificuldade = chave; desenhar(); }));
       });
       li.appendChild(nivel);
@@ -222,7 +222,7 @@
         } else {
           var nivel = linha('Nível');
           Object.keys(IT.DIFICULDADES).forEach(function (chave) {
-            nivel.appendChild(botao(IT.DIFICULDADES[chave].nome, 'opcao', vaga.dificuldade === chave,
+            nivel.appendChild(botao(IT.DIFICULDADES[chave].rotulo || IT.DIFICULDADES[chave].nome, 'opcao', vaga.dificuldade === chave,
               'nivel' + i + chave, function () { vaga.dificuldade = chave; desenhar(); }));
           });
           li.appendChild(nivel);

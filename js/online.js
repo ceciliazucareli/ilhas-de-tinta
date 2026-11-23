@@ -371,7 +371,7 @@
       }
       el.salaNivel.innerHTML = '';
       Object.keys(IT.DIFICULDADES).forEach(function (chave) {
-        el.salaNivel.appendChild(botaoOpcao(IT.DIFICULDADES[chave].nome, sala.nivel === chave, function () {
+        el.salaNivel.appendChild(botaoOpcao(IT.DIFICULDADES[chave].rotulo || IT.DIFICULDADES[chave].nome, sala.nivel === chave, function () {
           sala.nivel = chave;
           enviar(c, 'sala', sala);
           desenharSala();
@@ -783,7 +783,7 @@
       e.progresso = p[4] / 100;
       e.direcao = p[5] >= 0 ? DIRS[p[5]] : null;
       e.ultimaDirecao = DIRS[p[6]] || e.ultimaDirecao;
-      jogadores[i].cacando = !!p[7]; // Desafio 😈 caçando (mostra o aviso)
+      jogadores[i].cacando = !!p[7]; // Impossível 😈 caçando (mostra o aviso)
     });
   }
 
