@@ -87,6 +87,19 @@ Os números (tamanhos, metas, tempo) ficam em `js/config.js`.
 6. No fim aparece o ranking. O anfitrião escolhe **Jogar de novo** ou **Voltar
    para a sala**; os outros esperam ou saem.
 
+- **Celular e computador jogam juntos**, com qualquer um dos dois como
+  anfitrião. Cada aparelho tem a **própria câmera** (o celular segue o seu
+  explorador; o computador vê a ilha toda), mas o jogo é o mesmo para todos.
+- No celular, o código da sala abre o **teclado de números**; dá para digitar
+  só os 4 números (o "TINTA-" já aparece fixo), e colar "TINTA-1234" também
+  funciona.
+- Se o **anfitrião sai da tela** (bloqueou o celular, trocou de app), a
+  partida **pausa** e os outros veem "O anfitrião saiu da tela. Esperando ele
+  voltar… ⏳". Quando ele volta, vê a tela de pausa ("O anfitrião pausou o
+  jogo") e a partida continua quando ele toca em **Continuar**. Se as
+  mensagens do anfitrião param de chegar por 2,5 s (internet lenta), os outros
+  veem "Esperando o anfitrião… ⏳". O anfitrião pode pausar pelo ⏸; para os
+  outros, o ⏸ só abre o menu (a partida continua).
 - Se o **anfitrião sair**, todos voltam ao menu com um aviso.
 - Se outro jogador **sair no meio da partida**, o explorador dele passa a ser
   jogado pela **CPU (nível Médio)** até o fim, para a partida continuar justa.
@@ -96,6 +109,7 @@ Os números (tamanhos, metas, tempo) ficam em `js/config.js`.
 ![Sala de espera em duas janelas](docs/screenshots/online-sala.png)
 ![Partida online em duas janelas](docs/screenshots/online-partida.png)
 ![Ranking online](docs/screenshots/online-ranking.png)
+![Celular (anfitrião) e computador na mesma partida](docs/screenshots/celular-online-com-desktop.png)
 
 #### Como o online funciona
 
@@ -148,6 +162,46 @@ e os ícones em `icones/` permitem "instalar" o jogo na tela inicial.
 antigo. O `vercel.json` faz o `sw.js` nunca ficar em cache no servidor, para a
 atualização chegar.
 
+## No celular
+
+![Celular: partida com câmera e minimapa](docs/screenshots/celular-partida-retrato.png)
+
+- **Deslize o dedo** em qualquer lugar da tela para mudar de direção (só para
+  cima, baixo, esquerda ou direita — nada de diagonal). Vale o lado para onde o
+  dedo andou mais. A virada acontece **durante** o arrasto, assim que o dedo
+  anda uns 24 px, sem precisar soltar; e dá para virar **várias vezes no mesmo
+  arrasto** (cada virada recomeça a medida de onde o dedo está). Meia-volta
+  (180°) continua proibida. Se você pedir duas viradas bem rápidas (por
+  exemplo "cima" e logo "esquerda"), a segunda acontece na célula seguinte.
+- No começo da partida aparece a dica **"Deslize o dedo para mudar de
+  direção"** com uma mãozinha animada; ela some na primeira virada. No
+  computador a dica mostra as teclas.
+- Durante a partida o navegador não rola a página, não dá zoom de pinça, não
+  seleciona texto, não abre menu de toque longo e não "puxa para atualizar".
+- **Câmera:** em tela pequena, a câmera **segue o seu explorador** com células
+  grandes (28–40 px) e movimento suave, e aparece um **minimapa** no canto com
+  os territórios, os exploradores (o seu com borda branca) e a parte que você
+  está vendo. Quando o mapa inteiro cabe com células de bom tamanho (no
+  computador), a câmera mostra a ilha toda.
+- **Tela cheia** (⛶, quando o navegador permite — no iPhone o Safari não
+  permite, mas dá para "Adicionar à Tela de Início") e **tela sempre acesa**
+  durante a partida (Wake Lock, quando existe).
+- **⏸ Pausa e opções:** botão grande no canto. Liga/desliga a **vibração**
+  (vibra de leve ao conquistar e no "Ops!", em aparelhos que vibram) e as
+  **setas na tela**. As setas ficam **escondidas por padrão**: no celular,
+  deslizar é mais rápido e não tapa o jogo; quem preferir botões liga nas
+  opções (a escolha fica salva no aparelho). **Esc** ou **P** pausam no
+  computador.
+- Funciona em **retrato e paisagem**, ocupa a tela toda (100dvh) e respeita o
+  entalhe do iPhone (safe-area).
+- **Offline no celular:** a configuração é simples — **Só eu**, **Contra 1
+  CPU** ou **Contra 3**, com nível e cor. Vários jogadores no mesmo aparelho
+  ficam em "Mais opções" (pensado para o teclado do computador).
+- Se o jogo sai da tela (bloqueou o celular, trocou de app), a partida **pausa
+  sozinha**; ao voltar, toque em **Continuar**.
+
+![Celular deitado](docs/screenshots/celular-partida-paisagem.png)
+
 ## Controles
 
 | Vaga | Teclas |
@@ -157,8 +211,9 @@ atualização chegar.
 | J3 | **I J K L** |
 | J4 | teclado numérico **8 4 5 6** *ou* **T F G H** (para quem não tem teclado numérico) |
 
-- **Online:** cada um usa **W A S D**, **setas** ou os **botões na tela** no
-  próprio aparelho.
+- **Toque:** deslize o dedo (veja "No celular").
+- **Online:** cada um usa **W A S D**, **setas**, deslizar o dedo ou as setas
+  na tela no próprio aparelho.
 - Se houver **um único humano** na partida (inclusive no solo), ele pode usar
   **W A S D**, as **setas** ou as teclas da própria vaga.
 - Os **botões na tela** (▲ ◀ ▼ ▶) controlam o único humano, ou o primeiro
@@ -224,6 +279,7 @@ js/game.js            loop (requestAnimationFrame), regras e estados:
 tests/captura.html    testes da captura de área (abra no navegador)
 tests/simulacao.html  partidas automáticas com CPUs + teste dos controles
 tests/online.html     teste online de ponta a ponta (2 ou 4 janelas, Supabase real)
+tests/celular/        testes com toque de verdade e celular x desktop (Python + Chrome)
 docs/screenshots/     capturas de tela
 ```
 
@@ -258,6 +314,11 @@ rastro (`Grade.capturar(N)` em `js/grid.js`):
   mapa e o ranking são iguais em todas as janelas), "Jogar de novo", um
   jogador saindo no meio (vira CPU) e o anfitrião saindo (todos voltam ao menu).
 
+- `tests/celular/` — testes com **toque de verdade** no Chrome headless
+  (celular emulado, `Input.dispatchTouchEvent`) e uma partida online real
+  **celular × desktop** trocando quem é o anfitrião. Precisa de `python3` e
+  `google-chrome`; veja `tests/celular/LEIAME.md`.
+
 A página fica verde quando tudo passa.
 
 ### Ajustes rápidos
@@ -274,9 +335,14 @@ IlhasDeTinta.config.TEMPO_LIMITE = 15;    // partida de 15 segundos
 
 ## Limitações conhecidas
 
-- **Online — o anfitrião precisa ficar com o jogo aberto e visível.** Se a aba
-  do anfitrião for para o fundo (ou a tela do celular apagar), o navegador
-  desacelera a página e a partida fica lenta para todos.
+- **Online — o anfitrião precisa ficar com o jogo aberto e visível.** Se ele
+  sai da tela, a partida pausa para todos (veja acima). Se o celular do
+  anfitrião ficar bloqueado por muito tempo, o sistema pode fechar a conexão e
+  aí os outros voltam ao menu ("O anfitrião saiu da sala").
+- **Celular:** a vibração não existe no iPhone (Safari) e a tela cheia
+  também não; o Wake Lock só funciona em navegadores que o suportam (no iPhone,
+  iOS 16.4+). Vários jogadores no mesmo celular não é suportado de forma
+  confortável (é pensado para o teclado do computador).
 - **Online — atraso:** a direção de quem não é anfitrião chega ao anfitrião com
   o atraso da internet (normalmente 50–150 ms), então a virada pode acontecer
   uma célula depois. O anfitrião não tem atraso.
