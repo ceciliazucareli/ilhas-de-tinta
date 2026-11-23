@@ -19,6 +19,14 @@
  *             rastros de adversários que estejam perto. É um pouco mais lenta
  *             que um humano e espera um tempo entre uma caçada e outra, para
  *             continuar possível de vencer.
+ *   Desafio 😈 — o "cérebro" que tenta te atrapalhar (veja decidirDesafio):
+ *             anda na sua velocidade; CAÇA com previsão (vai ao ponto do seu
+ *             rastro — ou do caminho que você vai fazer para voltar — onde chega
+ *             ANTES de você chegar em casa); VIGIA quando você sai de casa;
+ *             ROUBA o seu território nas voltas dele; e NÃO DEIXA BRECHA (volta
+ *             para casa assim que alguém conseguiria alcançar o rastro dele).
+ *             Para continuar justo: prefere caçar humanos, mostra 😈 quando
+ *             está caçando e dá um respiro depois de cortar alguém.
  */
 (function (IT) {
   'use strict';
@@ -43,6 +51,17 @@
       rastroMax: 24, medo: 3,
       caca: 7,             // persegue rastros de adversários até esta distância
       esperaCaca: 6        // segundos de descanso entre caçadas
+    },
+    desafio: {
+      profundidade: [3, 6], lado: [3, 7], candidatos: 8,
+      acaso: 0, seguro: true,
+      rastroMax: 22, medo: 0,
+      caca: 0,             // a caçada do Desafio é a de decidirDesafio (com previsão)
+      estrategista: true,  // liga decidirDesafio
+      alcance: 18,         // até quantos passos vai atrás de um rastro / caminho de volta
+      respiro: 2.5,        // segundos sem caçar depois de cortar alguém
+      folgaPerigo: 1,      // volta para casa se alguém alcança meu rastro até 1 passo antes de mim
+      vigiaMaxRastro: 6    // só fica "vigiando" fora de casa com rastro curto
     }
   };
 
@@ -63,12 +82,13 @@
     this.jogo = jogo;
     this.nivel = NIVEIS[jogador.dificuldade] || NIVEIS.medio;
     this.plano = [];         // pontos de passagem {x, y}
-    this.modo = 'casa';      // 'casa' | 'sair' | 'voltar' | 'cacar'
+    this.modo = 'casa';      // 'casa' | 'sair' | 'voltar' | 'cacar' | 'vigiar' (Desafio)
     this.descansoCaca = 0;   // momento (s) a partir do qual pode caçar de novo
   }
 
   /* Chamado após uma penalidade ou renascimento: esquece o plano. */
   Cerebro.prototype.reiniciar = function () {
+    this.jogador.cacando = false;
     this.plano = [];
     this.modo = 'casa';
   };
@@ -153,6 +173,7 @@
   /* Nota de um plano: área nova que ele cerca, menos o perigo de adversários perto. */
   Cerebro.prototype.notaDoPlano = function (plano) {
     var grade = this.jogo.grade, id = this.jogador.id;
+    var pesos = this.pesosDeRoubo();
     var x0 = Math.min(plano.canto.x, plano.oposto.x), x1 = Math.max(plano.canto.x, plano.oposto.x);
     var y0 = Math.min(plano.canto.y, plano.oposto.y), y1 = Math.max(plano.canto.y, plano.oposto.y);
     var ganho = 0;
@@ -160,7 +181,7 @@
       for (var x = x0; x <= x1; x++) {
         var dono = grade.dono(x, y);
         if (dono === 0) ganho += 1;
-        else if (dono !== id) ganho += 1.5; // tomar território de adversário vale mais
+        else if (dono !== id) ganho += pesos[dono] || 1.5; // tomar território de adversário vale mais
       }
     }
     var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
@@ -168,6 +189,23 @@
     var raio = (x1 - x0 + y1 - y0) / 2 + 3;
     if (perigo < raio) ganho *= 0.4; // adversário perto da área: arriscado
     return ganho;
+  };
+
+  /* Quanto vale tomar uma célula de cada jogador (Desafio: humanos e o líder valem mais). */
+  Cerebro.prototype.pesosDeRoubo = function () {
+    var pesos = {}, eu = this.jogador, grade = this.jogo.grade;
+    if (!this.nivel.estrategista) return pesos;
+    var lider = null, maior = -1;
+    this.jogo.jogadores.forEach(function (j) {
+      if (j === eu) return;
+      var n = grade.contar(j.id);
+      if (n > maior) { maior = n; lider = j; }
+    });
+    this.jogo.jogadores.forEach(function (j) {
+      if (j === eu) return;
+      pesos[j.id] = (j.tipo === 'humano' ? 3 : 2) + (j === lider ? 1 : 0);
+    });
+    return pesos;
   };
 
   Cerebro.prototype.criarPlano = function () {
@@ -200,6 +238,143 @@
     return caminho[caminho.length - 1];
   };
 
+  /* ---------- Desafio 😈: prever, caçar, vigiar e não deixar brecha ---------- */
+
+  /* Distância (em passos) daqui até cada célula do mapa, sem pisar em "bloqueada". */
+  Cerebro.prototype.mapaDeDistancias = function (x0, y0, bloqueada) {
+    var g = this.jogo.grade, w = g.colunas, total = g.total;
+    var dist = new Int32Array(total).fill(-1), fila = new Int32Array(total);
+    var ini = 0, fim = 0, k0 = y0 * w + x0;
+    dist[k0] = 0; fila[fim++] = k0;
+    while (ini < fim) {
+      var k = fila[ini++], kx = k % w, ky = (k - kx) / w;
+      for (var d = 0; d < 4; d++) {
+        var nx = kx + (d === 0 ? 1 : d === 1 ? -1 : 0), ny = ky + (d === 2 ? 1 : d === 3 ? -1 : 0);
+        if (nx < 0 || ny < 0 || nx >= w || ny >= g.linhas) continue;
+        var nk = ny * w + nx;
+        if (dist[nk] !== -1 || bloqueada(nx, ny)) continue;
+        dist[nk] = dist[k] + 1;
+        fila[fim++] = nk;
+      }
+    }
+    return dist;
+  };
+
+  /* Caminho mais curto de um jogador até a casa dele, sem pisar no próprio rastro. */
+  Cerebro.prototype.caminhoDeVolta = function (j) {
+    var g = this.jogo.grade, e = j.explorador;
+    if (g.dono(e.x, e.y) === j.id && !g.temRastro(j.id)) return [];
+    return g.buscarCaminho(e.x, e.y,
+      function (x, y) { return g.dono(x, y) === j.id; },
+      function (x, y) { return g.rastro(x, y) === j.id; }) || null;
+  };
+
+  /* Quem o Desafio persegue: os humanos (se houver) — senão, qualquer adversário. */
+  Cerebro.prototype.alvosDeCaca = function () {
+    var eu = this.jogador;
+    var outros = this.jogo.jogadores.filter(function (j) { return j !== eu; });
+    var humanos = outros.filter(function (j) { return j.tipo === 'humano'; });
+    return humanos.length ? humanos : outros;
+  };
+
+  /*
+   * Melhor ponto para cortar alguém: uma célula do rastro dele (ou do caminho
+   * que ele vai fazer para voltar) onde eu chego DEPOIS de ela virar rastro e
+   * ANTES de ele chegar em casa. Devolve {x, y, passos} ou null.
+   */
+  Cerebro.prototype.pontoDeCorte = function (dist) {
+    var g = this.jogo.grade, w = g.colunas, n = this.nivel;
+    var vEu = this.jogador.explorador.velocidade || 1;
+    var melhor = null;
+    this.alvosDeCaca().forEach(function (alvo) {
+      var e = alvo.explorador, vEle = e.velocidade || 1;
+      if (!g.temRastro(alvo.id)) return;
+      var volta = this.caminhoDeVolta(alvo);
+      var passosAteCasa = volta ? volta.length : 99;
+      var tempoDele = (passosAteCasa + 1 - e.progresso) / vEle;
+      // a) rastro que já existe
+      for (var k = 0; k < g.total; k++) {
+        if (g.rastros[k] !== alvo.id || dist[k] < 0 || dist[k] > n.alcance) continue;
+        var kx = k % w, ky = (k - kx) / w;
+        if (kx === e.x && ky === e.y) continue; // mesma célula que ele: não corta
+        if (dist[k] / vEu < tempoDele && (!melhor || dist[k] < melhor.passos)) melhor = { x: kx, y: ky, passos: dist[k] };
+      }
+      // b) caminho que ele deve fazer até em casa (cada célula vira rastro quando ele passa)
+      if (volta) {
+        for (var i = 0; i < volta.length - 1; i++) {
+          var c = volta[i], kc = c.y * w + c.x, d = dist[kc];
+          if (d < 0 || d > n.alcance) continue;
+          var t = d / vEu;
+          var viraRastro = (i + 1 - e.progresso) / vEle;
+          if (t > viraRastro + 0.05 && t < tempoDele && (!melhor || d < melhor.passos)) melhor = { x: c.x, y: c.y, passos: d };
+        }
+      }
+    }, this);
+    return melhor;
+  };
+
+  /* Alguém consegue chegar no MEU rastro antes de eu chegar em casa? */
+  Cerebro.prototype.emPerigo = function () {
+    var g = this.jogo.grade, eu = this.jogador, e = eu.explorador;
+    if (!g.temRastro(eu.id)) return false;
+    var minhaVolta = this.distanciaDeCasa(e.x, e.y);
+    var vEu = e.velocidade || 1, folga = this.nivel.folgaPerigo;
+    return this.jogo.jogadores.some(function (j) {
+      if (j === eu) return false;
+      var c = g.buscarCaminho(j.explorador.x, j.explorador.y,
+        function (x, y) { return g.rastro(x, y) === eu.id; },
+        function (x, y) { return g.rastro(x, y) === j.id; });
+      if (!c) return false;
+      return c.length / (j.explorador.velocidade || 1) <= (minhaVolta + folga) / vEu;
+    });
+  };
+
+  /* Vigiar: ir para perto do caminho de volta de quem saiu de casa. */
+  Cerebro.prototype.pontoDeVigia = function (dist) {
+    var g = this.jogo.grade, w = g.colunas, melhor = null;
+    this.alvosDeCaca().forEach(function (alvo) {
+      if (!g.temRastro(alvo.id)) return;
+      var volta = this.caminhoDeVolta(alvo);
+      if (!volta || !volta.length) return;
+      volta.forEach(function (c) {
+        var d = dist[c.y * w + c.x];
+        if (d > 0 && (!melhor || d < melhor.passos)) melhor = { x: c.x, y: c.y, passos: d };
+      });
+    }, this);
+    return melhor;
+  };
+
+  /* Escolhe o modo do Desafio a cada célula (o movimento seguro é o de sempre). */
+  Cerebro.prototype.decidirDesafio = function (rastro, emCasa) {
+    var n = this.nivel, e = this.jogador.explorador, agora = this.jogo.ultimoTempo, self = this;
+    // Acabou de cortar alguém? Respiro curto antes de caçar de novo.
+    var cortes = this.jogador.estatisticas ? this.jogador.estatisticas.cortes : 0;
+    if (cortes > (this.cortesVistos || 0)) {
+      this.cortesVistos = cortes;
+      this.descansoCaca = agora + n.respiro;
+      if (this.modo === 'cacar' || this.modo === 'vigiar') { this.modo = rastro > 0 ? 'voltar' : 'casa'; this.plano = []; }
+    }
+    var descansando = agora < (this.descansoCaca || 0);
+
+    // Não deixa brecha: se alguém alcança meu rastro antes de eu chegar em casa, volto já.
+    if (rastro > 0 && this.emPerigo()) {
+      this.modo = 'voltar'; this.plano = [];
+      return;
+    }
+
+    var dist = this.mapaDeDistancias(e.x, e.y, function (x, y) { return self.ehMeuRastro(x, y); });
+    if (!descansando) {
+      var corte = this.pontoDeCorte(dist);
+      if (corte) { this.modo = 'cacar'; this.plano = [corte]; return; }
+      var vigia = rastro <= n.vigiaMaxRastro ? this.pontoDeVigia(dist) : null;
+      if (vigia) { this.modo = 'vigiar'; this.plano = [vigia]; return; }
+    }
+    if (this.modo === 'cacar' || this.modo === 'vigiar') {
+      this.modo = rastro > 0 ? 'voltar' : 'casa';
+      this.plano = [];
+    }
+  };
+
   /* ---------- Decisão a cada célula ---------- */
 
   Cerebro.prototype.decidir = function () {
@@ -222,8 +397,15 @@
       else if (this.plano.length === 0 && this.modo !== 'cacar') this.modo = 'voltar';
     }
 
+    // Desafio 😈: prever, caçar, vigiar e não deixar brecha.
+    if (n.estrategista) {
+      this.decidirDesafio(rastro, emCasa);
+      if (rastro > 0 && this.modo === 'sair' && !this.plano.length) this.modo = 'voltar';
+    }
+    this.jogador.cacando = this.modo === 'cacar'; // mostra 😈 em cima da cabeça
+
     // Difícil: caça rastros de adversários que estejam perto.
-    if (this.modo !== 'voltar') {
+    if (this.modo !== 'voltar' && !n.estrategista) {
       var caca = this.procurarCaca();
       if (caca) {
         if (this.modo !== 'cacar') this.descansoCaca = this.jogo.ultimoTempo + n.esperaCaca;

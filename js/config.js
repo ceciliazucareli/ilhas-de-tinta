@@ -69,7 +69,9 @@ window.IlhasDeTinta = window.IlhasDeTinta || {};
   IT.DIFICULDADES = {
     facil:   { nome: 'Fácil',   velocidade: 0.6 },
     medio:   { nome: 'Médio',   velocidade: 0.72 },
-    dificil: { nome: 'Difícil', velocidade: 0.78 }
+    dificil: { nome: 'Difícil', velocidade: 0.78 },
+    // Desafio 😈: anda na mesma velocidade de uma pessoa e tenta te atrapalhar (veja ai.js).
+    desafio: { nome: 'Desafio 😈', velocidade: 1 }
   };
 
   /*
