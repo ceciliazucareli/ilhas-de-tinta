@@ -129,7 +129,7 @@
       if (outro.explorador.x !== x || outro.explorador.y !== y) {
         j.estatisticas.cortes++;
         outro.estatisticas.rastroCortado++;
-        penalizar(outro, '✂️ ' + j.nome + ' cortou o rastro de ' + outro.nome + '!');
+        penalizar(outro, '✂️ ' + j.nome + ' cortou o rastro de ' + outro.nome + '!', j);
       }
     }
 
@@ -159,7 +159,7 @@
   }
 
   /* Penalidade suave: o rastro some e o explorador volta ao território. */
-  function penalizar(j, mensagem) {
+  function penalizar(j, mensagem, autor) {
     var grade = jogo.grade;
     grade.limparRastro(j.id);
     var destino = j.ultimoSeguro;
@@ -177,30 +177,56 @@
       j.ultimoSeguro = { x: destino.x, y: destino.y };
     }
     if (j.ia) j.ia.reiniciar();
-    avisar(mensagem, 'aviso', j);
+    avisar(mensagem, 'aviso', j, autor);
   }
 
   /* Balão de mensagem; no multi o texto sai na cor do jogador envolvido. */
-  function avisar(texto, tipo, j) {
-    IT.ui.mostrarMensagem(texto, tipo, jogo.modo === 'multi' && j ? j.cor.escura : null);
-    vibrarPara(j, tipo);
-    if (jogo.aoAvisar) jogo.aoAvisar(texto, tipo, j ? j.id : 0);
+  function avisar(texto, tipo, j, autor) {
+    // Na partida guiada quem fala é o cartão do tutorial (o balão ficaria por trás dele).
+    if (!jogo.tutorial) IT.ui.mostrarMensagem(texto, tipo, jogo.modo === 'multi' && j ? j.cor.escura : null);
+    efeitosPara(j, tipo, autor);
+    if (jogo.aoAvisar) jogo.aoAvisar(texto, tipo, j ? j.id : 0, autor ? autor.id : 0);
   }
 
-  /* Vibração curta quando o aviso é sobre quem joga NESTE aparelho. */
-  function vibrarPara(j, tipo) {
-    if (!j || j.tipo !== 'humano' || !j.local) return;
+  function ehDesteAparelho(j) { return !!j && j.tipo === 'humano' && j.local; }
+
+  /*
+   * Som e vibração quando o aviso é sobre quem joga NESTE aparelho:
+   * conquistou (pintar), levou "Ops!" (ops) ou cortou o rastro de alguém (corte).
+   */
+  function efeitosPara(j, tipo, autor) {
+    if (ehDesteAparelho(autor)) IT.som.tocar('corte');
+    if (!ehDesteAparelho(j)) return;
     IT.ui.vibrar(tipo === 'sucesso' ? 25 : [40, 60, 40]);
+    IT.som.tocar(tipo === 'sucesso' ? 'pintar' : 'ops');
+  }
+
+  /* Som do fim: fanfarra se alguém deste aparelho está no topo do ranking. */
+  function somDoFim(lista) {
+    var topo = lista.length ? lista[0].celulas : 0;
+    var ganhou = lista.some(function (r) { return r.celulas === topo && ehDesteAparelho(r.jogador); });
+    IT.som.tocar(ganhou || jogo.modo === 'solo' ? 'vitoria' : 'fim');
   }
 
   /* Online: quem saiu da sala no meio da partida passa a ser jogado pela CPU. */
   function transformarEmCPU(j, dificuldade) {
+    if (j.tipo === 'humano') j.eraHumano = true; // se a pessoa voltar, devolve o controle
     j.tipo = 'cpu';
     j.dificuldade = dificuldade || 'medio';
     j.local = true;
     j.explorador.velocidade = IT.DIFICULDADES[j.dificuldade].velocidade;
     j.ia = IT.ia.criar(j, jogo);
     j.explorador.controlador = j.ia;
+  }
+
+  /* Online: a pessoa voltou para a sala; a CPU devolve o explorador para ela. */
+  function devolverParaHumano(j) {
+    j.tipo = 'humano';
+    j.eraHumano = false;
+    j.local = false;
+    j.ia = null;
+    j.explorador.controlador = null;
+    j.explorador.velocidade = 1;
   }
 
   /* Ninguém é eliminado: quem perdeu todo o território ganha uma ilhinha nova. */
@@ -247,6 +273,7 @@
     IT.ui.esconderMensagem();
     var lista = ranking();
     IT.ui.mostrarFim(jogo, lista, acabouTempo && !atingiuMeta);
+    somDoFim(lista);
     IT.renderer.soltarConfete();
     if (jogo.aoFim) jogo.aoFim(lista, acabouTempo && !atingiuMeta);
     return true;
@@ -264,6 +291,7 @@
     jogo.jogadores.forEach(function (j) { j.explorador.teleportar(j.explorador.x, j.explorador.y); });
     IT.ui.esconderMensagem();
     IT.ui.mostrarFim(jogo, lista, porTempo);
+    somDoFim(lista);
     IT.renderer.soltarConfete();
   }
 
@@ -271,7 +299,15 @@
 
   /* Começa (ou recomeça) uma partida com a configuração dada. */
   function jogar(configuracao, opcoes) {
+    opcoes = opcoes || {};
+    if (!opcoes.tutorial && IT.tutorial && IT.tutorial.ativo()) IT.tutorial.cancelar();
     novaPartida(configuracao || jogo.configuracao, opcoes);
+    // Partida guiada: sem meta de vitória e um pouco mais devagar.
+    jogo.tutorial = !!opcoes.tutorial;
+    if (jogo.tutorial) {
+      jogo.meta = 2;
+      jogo.jogadores[0].explorador.velocidade = 0.8;
+    }
     jogo.estado = 'jogando';
     jogo.pausado = false;
     jogo.menuAberto = false;
@@ -283,9 +319,15 @@
     IT.ui.mostrarEstado('jogando');
     telaAcesa(true);
     // Dica do começo: deslizar o dedo (toque) ou as teclas (computador).
-    if (jogo.jogadores.some(function (j) { return j.tipo === 'humano' && j.local; })) {
+    if (!jogo.tutorial && jogo.jogadores.some(function (j) { return j.tipo === 'humano' && j.local; })) {
       IT.ui.mostrarDica(ehToque());
     }
+  }
+
+  /* "Jogar" do modo offline: na primeira vez neste aparelho, passa antes pela partida guiada. */
+  function jogarOffline(configuracao) {
+    if (IT.tutorial && IT.tutorial.precisa()) IT.tutorial.comecar(configuracao);
+    else jogar(configuracao);
   }
 
   /* Aparelho de toque? (celular/tablet) */
@@ -324,6 +366,7 @@
   }
 
   function sairDaPartida() {
+    if (IT.tutorial) IT.tutorial.cancelar();
     jogo.menuAberto = false;
     jogo.pausado = false;
     telaAcesa(false);
@@ -389,7 +432,7 @@
       // Online: cada aparelho controla só o próprio explorador (WASD, setas ou toque).
       if (esquema !== 0 && esquema !== 1 && esquema !== 'toque') return false;
       var aceitou = jogo.rede.direcionar(direcao);
-      if (aceitou) IT.ui.esconderDica();
+      if (aceitou) { IT.ui.esconderDica(); IT.som.tocar('virar'); }
       return aceitou;
     }
     var humanos = jogo.jogadores.filter(function (j) { return j.tipo === 'humano'; });
@@ -403,18 +446,18 @@
     }
     if (!alvo) return false;
     var ok = alvo.explorador.pedirDirecao(direcao);
-    if (ok) IT.ui.esconderDica();
+    if (ok) { IT.ui.esconderDica(); IT.som.tocar('virar'); }
     return ok;
   }
 
   /* Enter/Espaço: confirma a tela atual. */
   function confirmar() {
     if (jogo.estado === 'configuracao') {
-      jogar(IT.setup ? IT.setup.configuracao() : CONFIGURACAO_SOLO);
+      jogarOffline(IT.setup ? IT.setup.configuracao() : CONFIGURACAO_SOLO);
       return true;
     }
-    if (jogo.estado === 'fim' && (!jogo.rede || jogo.rede.anfitriao)) {
-      jogarDeNovo();
+    if (jogo.estado === 'fim') {
+      jogarDeNovo(); // online: vota na revanche
       return true;
     }
     return false; // menu, telas online e partida: os botões cuidam disso
@@ -463,6 +506,7 @@
     var dt = Math.min(0.05, agora - (relogioAnterior || agora)); // limita saltos
     relogioAnterior = agora;
     passo(dt);
+    if (jogo.tutorial && IT.tutorial) IT.tutorial.atualizar(jogo);
     IT.renderer.desenhar(jogo.grade, jogo.jogadores, agora, jogo.modo);
     requestAnimationFrame(quadro);
   }
@@ -471,7 +515,7 @@
     IT.renderer.iniciar(document.getElementById('tela'));
     novaPartida(CONFIGURACAO_SOLO); // mapa de fundo atrás da tela de configuração
     IT.ui.iniciar({
-      aoJogar: function () { jogar(IT.setup ? IT.setup.configuracao() : CONFIGURACAO_SOLO); },
+      aoJogar: function () { jogarOffline(IT.setup ? IT.setup.configuracao() : CONFIGURACAO_SOLO); },
       aoJogarDeNovo: jogarDeNovo,
       aoMudarJogadores: mudarJogadores,
       aoOffline: function () { irPara('configuracao'); },
@@ -483,6 +527,7 @@
     });
     if (IT.setup) IT.setup.iniciar();
     if (IT.online) IT.online.iniciar();
+    if (IT.tutorial) IT.tutorial.iniciar();
     IT.ui.prepararPartida(jogo);
     IT.ui.atualizarHUD(jogo);
     IT.ui.mostrarEstado('menu');
@@ -504,10 +549,11 @@
   jogo.jogar = jogar;
   jogo.pausar = pausar;
   jogo.continuar = continuar;
-  jogo.vibrarPara = vibrarPara;
+  jogo.efeitosPara = efeitosPara;
   jogo.irPara = irPara;
   jogo.mostrarFimRemoto = mostrarFimRemoto;
   jogo.transformarEmCPU = transformarEmCPU;
+  jogo.devolverParaHumano = devolverParaHumano;
   jogo.jogadorPorId = jogadorPorId;
   jogo.passo = passo; // usado por tests/simulacao.html para acelerar partidas
   jogo.ranking = ranking;

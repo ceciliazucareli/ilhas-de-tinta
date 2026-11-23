@@ -63,6 +63,11 @@
       $('pausa-sair').addEventListener('click', callbacks.aoSairDaPartida);
       $('opcao-vibrar').addEventListener('click', function () { IT.ui.trocarOpcao('vibrar'); IT.ui.vibrar(30); });
       $('opcao-setas').addEventListener('click', function () { IT.ui.trocarOpcao('setas'); });
+      $('opcao-som').addEventListener('click', function () { IT.ui.trocarOpcao('som'); IT.som.tocar('pintar'); });
+      // Clique suave nos botões dos menus.
+      document.addEventListener('click', function (e) {
+        if (e.target.closest && e.target.closest('.botao, .botao-menu, .opcao, .cor-opcao, .botao-redondo')) IT.som.tocar('clique');
+      });
       var telaCheia = $('botao-tela-cheia');
       var raiz = document.documentElement;
       if (document.fullscreenEnabled && raiz.requestFullscreen) {
@@ -89,8 +94,10 @@
       el.hudMulti.hidden = solo;
 
       if (solo) {
-        el.textoMeta.textContent = 'Meta ' + meta + '%';
+        // Partida guiada: não tem meta, é só treino.
+        el.textoMeta.textContent = jogo.tutorial ? 'Treino 🎓' : 'Meta ' + meta + '%';
         el.marcaMeta.style.left = meta + '%';
+        el.marcaMeta.hidden = !!jogo.tutorial;
       } else {
         el.metaMulti.textContent = 'Ganha quem chegar a ' + meta + '% ou tiver mais no fim do tempo!';
         el.placar.innerHTML = '';
@@ -158,11 +165,24 @@
 
     /* Botões da tela de fim: 'offline', 'anfitriao' ou 'cliente' (online). */
     configurarFim: function (papel) {
-      var cliente = papel === 'cliente';
-      el.botaoJogarDeNovo.hidden = cliente;
-      el.fimEspera.hidden = !cliente;
+      // Online, todos votam na revanche (começa quando todos os humanos tocarem).
+      var online = papel !== 'offline';
+      el.botaoJogarDeNovo.hidden = false;
+      el.botaoJogarDeNovo.disabled = false;
+      el.botaoJogarDeNovo.textContent = online ? '🔁 Revanche' : 'Jogar de novo';
+      el.fimEspera.hidden = true;
       el.botaoMudarJogadores.textContent = papel === 'offline' ? 'Mudar jogadores'
         : papel === 'anfitriao' ? 'Voltar para a sala' : 'Sair da sala';
+    },
+
+    /* Online: quem já votou na revanche ("Querem revanche: Ana, Beto — 2 de 3"). */
+    mostrarVotosRevanche: function (nomes, total, euVotei) {
+      el.fimEspera.hidden = nomes.length === 0;
+      el.fimEspera.textContent = '🔁 Querem revanche: ' + nomes.join(', ') + ' (' + nomes.length + ' de ' + total + ')';
+      if (euVotei) {
+        el.botaoJogarDeNovo.disabled = true;
+        el.botaoJogarDeNovo.textContent = '✅ Esperando os outros…';
+      }
     },
 
     /* Tela de fim: comemoração no solo; ranking colorido com vários jogadores. */
@@ -208,13 +228,14 @@
 
     /* ---------- Opções (salvas neste aparelho) ---------- */
 
-    opcoes: { vibrar: true, setas: false },
+    opcoes: { vibrar: true, setas: false, som: true },
 
     carregarOpcoes: function () {
       try {
         var salvas = JSON.parse(localStorage.getItem('ilhas-de-tinta:opcoes') || '{}');
         if (typeof salvas.vibrar === 'boolean') IT.ui.opcoes.vibrar = salvas.vibrar;
         if (typeof salvas.setas === 'boolean') IT.ui.opcoes.setas = salvas.setas;
+        if (typeof salvas.som === 'boolean') IT.ui.opcoes.som = salvas.som;
       } catch (e) { /* sem armazenamento: fica o padrão */ }
       IT.ui.aplicarOpcoes();
     },
@@ -227,7 +248,9 @@
 
     aplicarOpcoes: function () {
       var o = IT.ui.opcoes;
-      var vib = $('opcao-vibrar'), set = $('opcao-setas');
+      var vib = $('opcao-vibrar'), set = $('opcao-setas'), som = $('opcao-som');
+      som.setAttribute('aria-pressed', String(o.som));
+      som.querySelector('b').textContent = o.som ? 'sim' : 'não';
       vib.hidden = !('vibrate' in navigator);
       vib.setAttribute('aria-pressed', String(o.vibrar));
       vib.querySelector('b').textContent = o.vibrar ? 'sim' : 'não';

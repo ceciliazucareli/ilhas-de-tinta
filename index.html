@@ -63,6 +63,17 @@
         <span id="dica-texto">Deslize o dedo para mudar de direção</span>
       </div>
 
+      <!-- Partida guiada (primeira vez ou "Como jogar") -->
+      <div id="tutorial" class="tutorial" hidden aria-live="polite">
+        <p id="tutorial-passos" class="tutorial-passos"></p>
+        <p id="tutorial-titulo" class="tutorial-titulo"></p>
+        <p id="tutorial-texto" class="tutorial-texto"></p>
+        <div class="tutorial-botoes">
+          <button id="tutorial-jogar" class="botao" hidden>Vamos jogar! ▶</button>
+          <button id="tutorial-pular" class="botao-link">Pular</button>
+        </div>
+      </div>
+
       <!-- Online: avisos de espera (anfitrião fora da tela, conexão lenta) -->
       <div id="aviso-rede" class="aviso-rede" hidden role="status" aria-live="polite"></div>
 
@@ -93,6 +104,7 @@
               <span class="botao-menu-texto">Com amigos, cada um no seu aparelho</span>
             </button>
           </div>
+          <button id="botao-como-jogar" class="botao-link">❓ Como jogar</button>
           <p id="menu-aviso" class="aviso-online" role="status" aria-live="polite"></p>
           <!-- Instalar como app (aparece só quando dá para instalar e ainda não está instalado) -->
           <button id="botao-instalar" class="botao botao-secundario" hidden>📲 Instalar o jogo</button>
@@ -134,6 +146,7 @@
         <div class="cartao cartao-largo">
           <p class="sala-rotulo">Código da sala</p>
           <p id="sala-codigo" class="sala-codigo">TINTA-0000</p>
+          <button id="sala-convidar" class="botao botao-secundario botao-convidar">🔗 Convidar amigos</button>
           <p id="sala-dica" class="dica">Diga este código para seus amigos entrarem!</p>
 
           <p class="setup-titulo">Quem já chegou</p>
@@ -185,6 +198,7 @@
           <p id="pausa-texto" class="dica"></p>
           <button id="pausa-continuar" class="botao botao-grande">▶ Continuar</button>
           <div class="opcoes-lista">
+            <button id="opcao-som" class="opcao opcao-linha" aria-pressed="true">🔊 Som: <b>sim</b></button>
             <button id="opcao-vibrar" class="opcao opcao-linha" aria-pressed="true">📳 Vibrar: <b>sim</b></button>
             <button id="opcao-setas" class="opcao opcao-linha" aria-pressed="false">🎮 Setas na tela: <b>não</b></button>
           </div>
@@ -216,12 +230,14 @@
   <script src="js/input.js"></script>
   <script src="js/renderer.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/som.js"></script>
   <script src="js/ai.js"></script>
   <script src="js/setup.js"></script>
   <!-- Online: biblioteca do Supabase (cópia local, versão fixa) + sala/sincronização -->
   <script src="js/vendor/supabase-2.119.0.umd.js"></script>
   <script src="js/online.js"></script>
   <script src="js/instalar.js"></script>
+  <script src="js/tutorial.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>

@@ -95,9 +95,11 @@
       atualizarMenu();
       iniciarServiceWorker();
 
-      // Atalhos do ícone instalado.
-      var abrir = new URLSearchParams(location.search).get('abrir');
-      if (abrir === 'offline') IT.jogo.irPara('configuracao');
+      // Atalhos do ícone instalado e link de convite (?sala=4821).
+      var params = new URLSearchParams(location.search);
+      var abrir = params.get('abrir');
+      if (params.get('sala') && IT.online) IT.online.abrirConvite(params.get('sala'));
+      else if (abrir === 'offline') IT.jogo.irPara('configuracao');
       else if (abrir === 'online' && IT.online) IT.online.abrir();
     },
     jaInstalado: jaInstalado

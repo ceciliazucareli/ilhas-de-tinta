@@ -30,6 +30,7 @@
   var vista = { x0: 0, y0: 0, x1: 0, y1: 0 };      // células visíveis (inclusive)
   var mundo = { w: 0, h: 0 };
   var minimapa = { canvas: null, atualizadoEm: -1 };
+  var casaDestacada = 0;          // tutorial: id do jogador cuja casa pisca (0 = nenhuma)
   var CELULA_MINIMA_TELA = 22;    // toque: abaixo disso (mapa inteiro), a câmera passa a seguir
   var CELULA_MINIMA_DESKTOP = 15; // mouse/teclado: só segue em janelas bem pequenas
 
@@ -341,6 +342,32 @@
 
   /* ---------- API pública ---------- */
 
+  /* Tutorial: contorno pulsando em volta da casa e uma casinha pulando em cima. */
+  function desenharCasaDestacada(grade, tempo) {
+    var x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+    for (var y = 0; y < grade.linhas; y++) {
+      for (var x = 0; x < grade.colunas; x++) {
+        if (grade.dono(x, y) !== casaDestacada) continue;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+    if (x1 < 0) return;
+    var pulso = (Math.sin(tempo * 6) + 1) / 2;
+    var folga = 4 + pulso * 6;
+    ctx.save();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(255,255,255,' + (0.6 + pulso * 0.4) + ')';
+    ctx.setLineDash([10, 8]);
+    retanguloArredondado(px(x0) - folga, px(y0) - folga, (x1 - x0 + 1) * cel + 2 * folga, (y1 - y0 + 1) * cel + 2 * folga, 12);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = Math.round(cel * 1.1) + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('🏠', px((x0 + x1 + 1) / 2), px(y1 + 1) + cel * 1.3 + Math.sin(tempo * 5) * 4);
+    ctx.restore();
+  }
+
   /* ---------- Câmera ---------- */
 
   /* Ajusta o canvas ao tamanho dele na tela (com devicePixelRatio até 2). */
@@ -531,6 +558,7 @@
       ctx.setTransform(e, 0, 0, e, tela.dpr * (tela.w / 2 - cam.x * cam.escala), tela.dpr * (tela.h / 2 - cam.y * cam.escala));
       desenharIlha(grade);
       desenharCelulas(grade, tempo);
+      if (casaDestacada) desenharCasaDestacada(grade, tempo);
       jogadores.forEach(function (j) { desenharExplorador(j, tempo, modo); });
       if (cam.seguindo) desenharMinimapa(grade, jogadores, tempo);
       if (confetes.length) {
@@ -538,6 +566,9 @@
         desenharConfete(dt);
       }
     },
+
+    /* Tutorial: faz a casa do jogador "id" piscar (0 desliga). */
+    destacarCasa: function (id) { casaDestacada = id || 0; },
 
     /* Informações da câmera (usadas nos testes). */
     camera: function () {

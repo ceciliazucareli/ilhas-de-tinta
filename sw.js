@@ -9,7 +9,7 @@
  * Estratégia: "cache primeiro". O modo Online continua precisando de internet
  * (as conexões com o Supabase não passam pelo cache).
  */
-var VERSAO = 'ilhas-de-tinta-v3';
+var VERSAO = 'ilhas-de-tinta-v4';
 
 var ARQUIVOS = [
   './',
@@ -22,11 +22,13 @@ var ARQUIVOS = [
   'js/input.js',
   'js/renderer.js',
   'js/ui.js',
+  'js/som.js',
   'js/ai.js',
   'js/setup.js',
   'js/vendor/supabase-2.119.0.umd.js',
   'js/online.js',
   'js/instalar.js',
+  'js/tutorial.js',
   'js/game.js',
   'icones/icone.svg',
   'icones/icone-192.png',
