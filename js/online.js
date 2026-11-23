@@ -25,12 +25,23 @@
  *   fim       anfitrião → todos   ranking final
  *   voltarSala anfitrião → todos  todos voltam para a sala de espera
  *   dir       cliente → anfitrião  nova direção do explorador do cliente
+ *   revanche  qualquer um → anfitrião  "quero revanche" (voto)
+ *   votos     anfitrião → todos   quem já votou; com todos os humanos, começa outra partida
  *   pausa     anfitrião → todos   partida pausada (motivo: 'menu' ou 'fora' = saiu da tela)
  *   retomar   anfitrião → todos   partida continua
  *
  * Se o anfitrião sai da tela (bloqueou o celular, trocou de app), a partida
  * PAUSA e os outros veem "O anfitrião saiu da tela, esperando…". Se nenhuma
  * mensagem chega por alguns segundos, os outros veem "Esperando o anfitrião…".
+ *
+ * TROCA DE ANFITRIÃO: se o anfitrião sai da sala (Presence) ou fica mais de
+ * O.TEMPO_ANFITRIAO_FORA segundos fora da tela, o próximo jogador da lista da
+ * sala assume (todos calculam o mesmo nome). Ele já tem o mapa, as posições e o
+ * relógio: liga as CPUs e continua a partida. O explorador do antigo anfitrião
+ * vira CPU; se ele voltar, recebe o controle de volta como jogador comum.
+ * Cada troca aumenta sala.eleicao; toda mensagem do anfitrião leva "a" (quem é)
+ * e "e" (número da eleição), e vale sempre a eleição mais nova — assim um
+ * anfitrião antigo que reapareça percebe e vira jogador comum.
  */
 (function (IT) {
   'use strict';
@@ -167,6 +178,10 @@
 
   function enviar(c, evento, dados) {
     if (!c || c.fechada) return;
+    if (c.anfitriao && dados && typeof dados === 'object' && c.sala) {
+      dados.a = c.cid;                    // quem está mandando como anfitrião
+      dados.e = c.sala.eleicao || 0;      // de qual "eleição" de anfitrião
+    }
     c.canal.send({ type: 'broadcast', event: evento, payload: dados }).catch(function (erro) {
       console.warn('Falha ao enviar', evento, erro);
     });
@@ -219,9 +234,7 @@
     if (!c.anfitriao) {
       // Cliente: só precisa saber se o anfitrião continua aqui.
       if (c.sala && presentes[c.sala.anfitriao]) c.vistoAnfitriao = true;
-      if (c.sala && c.vistoAnfitriao && !presentes[c.sala.anfitriao]) {
-        sair('O anfitrião saiu da sala. 👋 Que tal criar uma sala nova?');
-      }
+      if (c.sala && c.vistoAnfitriao && !presentes[c.sala.anfitriao]) eleger(c, presentes);
       return;
     }
 
@@ -237,18 +250,28 @@
     Object.keys(presentes).forEach(function (cid) {
       if (cid === c.cid || presentes[cid].papel === 'anfitriao') return;
       if (sala.membros.some(function (m) { return m.cid === cid; })) return;
-      if (sala.membros.length >= IT.config.MAX_JOGADORES) {
+      // Já estava na partida (caiu e voltou, ou era o anfitrião antigo)? Mesmo nome e cor.
+      var antigo = IT.jogo.rede === c ? IT.jogo.jogadores.filter(function (j) { return j.cid === cid; })[0] : null;
+      if (sala.membros.length >= IT.config.MAX_JOGADORES && !antigo) {
         enviar(c, 'cheia', { cid: cid });
         return;
       }
       sala.membros.push({
         cid: cid,
-        nome: String(presentes[cid].nome || 'Explorador').slice(0, 12),
-        cor: primeiraCorLivre(sala, presentes[cid].cor, cid)
+        nome: antigo ? antigo.nome : String(presentes[cid].nome || 'Explorador').slice(0, 12),
+        cor: antigo ? antigo.corNome : primeiraCorLivre(sala, presentes[cid].cor, cid)
       });
+      if (antigo && antigo.eraHumano && IT.jogo.estado === 'jogando') {
+        IT.jogo.devolverParaHumano(antigo);
+        var texto = antigo.nome + ' voltou! 🎉';
+        IT.ui.mostrarMensagem(texto, 'sucesso', antigo.cor.escura);
+        enviar(c, 'msg', { texto: texto, tipo: 'sucesso', id: antigo.id });
+      }
       mudou = true;
     });
     sala.cpus = Math.min(sala.cpus, IT.config.MAX_JOGADORES - sala.membros.length);
+    // Alguém saiu na tela de fim: talvez agora todos os que ficaram já votaram na revanche.
+    if (mudou && IT.jogo.estado === 'fim' && IT.jogo.rede === c && c.votos) registrarVoto(c, '-');
     if (mudou) {
       enviar(c, 'sala', sala);
       desenharSala();
@@ -486,6 +509,7 @@
       return;
     }
     avisoSala('');
+    c.votos = {};
     c.sala.estado = 'jogando';
     c.sala.rodada++;
     c.rodada = c.sala.rodada;
@@ -495,7 +519,18 @@
 
     var jogo = IT.jogo;
     jogo.rede = c;
-    jogo.aoAvisar = function (texto, tipo, id) { enviar(c, 'msg', { texto: texto, tipo: tipo, id: id }); };
+    ligarGanchosDoAnfitriao(c);
+    // Cada vaga humana: joga aqui só o próprio anfitrião; os outros, pela rede.
+    configuracao.vagas.forEach(function (v) { v.local = v.cid === c.cid || v.tipo === 'cpu'; });
+    jogo.jogar(configuracao);
+    enviarSnapshot(c);
+    transmitir(c);
+  }
+
+  /* Anfitrião: avisos e fim da partida vão para todos os aparelhos. */
+  function ligarGanchosDoAnfitriao(c) {
+    var jogo = IT.jogo;
+    jogo.aoAvisar = function (texto, tipo, id, de) { enviar(c, 'msg', { texto: texto, tipo: tipo, id: id, de: de || 0 }); };
     jogo.aoFim = function (lista, porTempo) {
       enviarSnapshot(c);
       enviar(c, 'fim', {
@@ -505,12 +540,11 @@
       });
       c.sala.estado = 'fim';
     };
-    // Cada vaga humana: joga aqui só o próprio anfitrião; os outros, pela rede.
-    configuracao.vagas.forEach(function (v) { v.local = v.cid === c.cid || v.tipo === 'cpu'; });
-    jogo.jogar(configuracao);
-    enviarSnapshot(c);
+  }
 
-    // Transmissão do estado.
+  /* Anfitrião: manda o estado 10x/s (com foto completa de tempos em tempos). */
+  function transmitir(c) {
+    var jogo = IT.jogo;
     c.timers.forEach(function (t) { clearInterval(t); });
     c.timers = [];
     var envios = 0;
@@ -521,6 +555,149 @@
       if (envios % porSnapshot === 0) enviarSnapshot(c);
       else enviarEstado(c);
     }, 1000 / O.ENVIOS_POR_SEGUNDO));
+    c.timers.push(setInterval(function () { if (c.sala.estado === 'espera') enviar(c, 'sala', c.sala); }, 3000));
+  }
+
+  /* ---------- Troca de anfitrião ---------- */
+
+  function presencas(c) {
+    var estado = c.canal.presenceState(), presentes = {};
+    Object.keys(estado).forEach(function (k) { presentes[k] = (estado[k] || [])[0] || {}; });
+    return presentes;
+  }
+
+  /*
+   * Cliente: o anfitrião sumiu. Escolhe o próximo da lista da sala que ainda
+   * está aqui (todos os aparelhos chegam ao mesmo nome). Se for eu, assumo.
+   */
+  function eleger(c, presentes) {
+    if (c.anfitriao || !c.sala) return;
+    presentes = presentes || presencas(c);
+    var antigo = c.sala.anfitriao;
+    var candidatos = c.sala.membros.filter(function (m) {
+      return m.cid !== antigo && (m.cid === c.cid || presentes[m.cid]);
+    });
+    if (!candidatos.length) {
+      sair('O anfitrião saiu da sala. 👋 Que tal criar uma sala nova?');
+      return;
+    }
+    var novo = candidatos[0];
+    c.sala.anfitriao = novo.cid;
+    c.sala.eleicao = (c.sala.eleicao || 0) + 1;
+    c.vistoAnfitriao = true;
+    c.ultimaMensagemEm = Date.now();
+    c.foraDesde = 0;
+    if (novo.cid === c.cid) {
+      assumir(c, antigo);
+    } else {
+      mostrarPausaRemota(c, 'troca');
+      IT.ui.avisoRede('O anfitrião saiu. ' + novo.nome + ' vai continuar a partida… 👑');
+    }
+  }
+
+  /* Volta para a casa mais perto (o cliente não sabia o "último lugar seguro"). */
+  function casaMaisPerto(j) {
+    var g = IT.jogo.grade, e = j.explorador;
+    if (g.dono(e.x, e.y) === j.id) return { x: e.x, y: e.y };
+    var caminho = g.buscarCaminho(e.x, e.y, function (x, y) { return g.dono(x, y) === j.id; }, function () { return false; });
+    return caminho ? caminho[caminho.length - 1] : { x: j.inicio.x, y: j.inicio.y };
+  }
+
+  /* Este aparelho vira o anfitrião e continua a partida de onde estava. */
+  function assumir(c, antigo) {
+    var jogo = IT.jogo;
+    c.anfitriao = true;
+    c.motivoPausa = 0;
+    c.votos = {};
+    c.sala.anfitriao = c.cid;
+    c.sala.membros = c.sala.membros.filter(function (m) { return m.cid !== antigo; });
+    var eu = c.sala.membros.filter(function (m) { return m.cid === c.cid; })[0];
+    c.canal.track({ nome: c.nome, cor: eu ? eu.cor : null, papel: 'anfitriao' }).catch(function () {});
+
+    if (jogo.rede === c && (jogo.estado === 'jogando' || jogo.estado === 'fim')) {
+      jogo.jogadores.forEach(function (j) {
+        if (j.cid === antigo && j.tipo === 'humano') {
+          jogo.transformarEmCPU(j, O.NIVEL_DE_QUEM_SAI);
+        } else if (j.tipo === 'cpu') {
+          j.local = true;
+          if (!j.ia) { j.ia = IT.ia.criar(j, jogo); j.explorador.controlador = j.ia; }
+        } else {
+          j.local = j.cid === c.cid;
+        }
+        // O que só o anfitrião sabia: onde é "casa" e se tem rastro aberto.
+        j.ultimoSeguro = casaMaisPerto(j);
+        j.explorador.travarMeiaVolta = jogo.grade.temRastro(j.id);
+      });
+      ligarGanchosDoAnfitriao(c);
+      jogo.pausado = false;
+      c.seq = c.ultimoSeq + 1;
+      IT.ui.avisoRede('');
+      if (jogo.estado === 'jogando') enviarSnapshot(c);
+      transmitir(c);
+    } else {
+      transmitir(c);
+      desenharSala();
+    }
+    enviar(c, 'sala', c.sala);
+    var texto = c.nome + ' agora é o anfitrião 👑';
+    IT.ui.mostrarMensagem(texto, 'sucesso');
+    enviar(c, 'msg', { texto: texto, tipo: 'sucesso', id: 0 });
+  }
+
+  /*
+   * Eu era anfitrião, mas outro assumiu numa eleição mais nova (eu estava fora
+   * da tela ou sem internet). Continuo na partida como jogador comum.
+   */
+  function virarCliente(c, p) {
+    var jogo = IT.jogo;
+    c.anfitriao = false;
+    c.timers.forEach(function (t) { clearInterval(t); clearTimeout(t); });
+    c.timers = [];
+    c.vigiando = false;
+    c.sala.anfitriao = p.a;
+    c.sala.eleicao = p.e || 0;
+    c.vistoAnfitriao = true;
+    c.ultimaMensagemEm = Date.now();
+    c.ultimoSeq = -1;
+    jogo.aoAvisar = null;
+    jogo.aoFim = null;
+    jogo.pausado = false;
+    // Só pede o explorador de volta quando a pessoa estiver olhando a tela;
+    // enquanto o celular estiver bloqueado, a CPU continua jogando por ela.
+    if (document.visibilityState === 'visible') voltarComoJogador(c);
+    else c.esperandoVoltar = true;
+    if (jogo.rede === c) {
+      jogo.jogadores.forEach(function (j) {
+        j.ia = null;
+        j.explorador.controlador = null;
+        j.local = j.cid === c.cid;
+        if (j.cid === c.cid) j.tipo = 'humano';
+      });
+      c.vigiando = true;
+      vigiarAnfitriao(c);
+    }
+    IT.ui.mostrarMensagem('Você ficou fora e outro jogador virou o anfitrião. Pode continuar jogando! 🙂', 'aviso');
+    desenharSala();
+  }
+
+  /* Avisa a sala que estou aqui como jogador (o anfitrião devolve meu explorador). */
+  function voltarComoJogador(c) {
+    c.esperandoVoltar = false;
+    var eu = c.sala.membros.filter(function (m) { return m.cid === c.cid; })[0];
+    c.canal.track({ nome: c.nome, cor: eu ? eu.cor : null, papel: 'jogador' }).catch(function () {});
+  }
+
+  /* A mensagem veio de um anfitrião de uma eleição mais nova que a minha? */
+  function eleicaoMaisNova(c, p) {
+    if (!p || !p.a || !c.sala) return false;
+    var minha = c.sala.eleicao || 0, dela = p.e || 0;
+    if (dela !== minha) return dela > minha;
+    // Mesma eleição com dois anfitriões (raro): fica quem vem antes na lista da sala.
+    var ordem = function (cid) {
+      var i = c.sala.membros.map(function (m) { return m.cid; }).indexOf(cid);
+      return i === -1 ? 99 : i;
+    };
+    return ordem(p.a) < ordem(c.sala.anfitriao);
   }
 
   function resumoJogadores() {
@@ -561,6 +738,38 @@
       d: Array.prototype.join.call(g.donos, ''),
       k: Array.prototype.join.call(g.rastros, '')
     });
+  }
+
+  /* ---------- Revanche (votação) ---------- */
+
+  /* Humanos que jogaram esta partida e continuam na sala. */
+  function humanosDaPartida(c) {
+    var presentes = (c.sala ? c.sala.membros : []).map(function (m) { return m.cid; });
+    return IT.jogo.jogadores.filter(function (j) {
+      return j.tipo === 'humano' && j.cid && presentes.indexOf(j.cid) !== -1;
+    });
+  }
+
+  /* Anfitrião: registra um voto, avisa todos e começa quando todos votaram. */
+  function registrarVoto(c, cid) {
+    if (!c.anfitriao || IT.jogo.rede !== c || IT.jogo.estado !== 'fim') return;
+    c.votos = c.votos || {};
+    c.votos[cid] = true;
+    var humanos = humanosDaPartida(c);
+    var votaram = humanos.filter(function (j) { return c.votos[j.cid]; });
+    var nomes = votaram.map(function (j) { return j.nome; });
+    var cids = votaram.map(function (j) { return j.cid; });
+    enviar(c, 'votos', { nomes: nomes, cids: cids, total: humanos.length });
+    IT.ui.mostrarVotosRevanche(nomes, humanos.length, !!c.votos[c.cid]);
+    if (votaram.length >= humanos.length && !c.revancheMarcada) {
+      c.revancheMarcada = true;
+      IT.ui.mostrarMensagem('Todo mundo quer revanche! 🔁', 'sucesso');
+      enviar(c, 'msg', { texto: 'Todo mundo quer revanche! 🔁', tipo: 'sucesso', id: 0 });
+      setTimeout(function () {
+        c.revancheMarcada = false;
+        if (con === c && IT.jogo.estado === 'fim') comecarPartida();
+      }, 1200);
+    }
   }
 
   /* ---------- Partida: cliente ---------- */
@@ -611,10 +820,13 @@
   var TEXTOS_PAUSA = {
     fora: 'O anfitrião saiu da tela. Esperando ele voltar… ⏳',
     menu: 'O anfitrião pausou o jogo. ⏸',
+    troca: 'O anfitrião saiu. Outro jogador vai continuar a partida… 👑',
     lento: 'Esperando o anfitrião… ⏳'
   };
 
   function mostrarPausaRemota(c, motivo) {
+    if (motivo === 'fora' && c.pausaRemota !== 'fora') c.foraDesde = Date.now();
+    if (motivo !== 'fora') c.foraDesde = 0;
     c.pausaRemota = motivo || 0;
     IT.ui.avisoRede(motivo ? TEXTOS_PAUSA[motivo] || TEXTOS_PAUSA.menu : '');
   }
@@ -623,7 +835,11 @@
   function vigiarAnfitriao(c) {
     c.timers.push(setInterval(function () {
       var jogo = IT.jogo;
-      if (con !== c || jogo.rede !== c || jogo.estado !== 'jogando') return;
+      if (con !== c || c.anfitriao || jogo.rede !== c || jogo.estado !== 'jogando') return;
+      // Anfitrião fora da tela há muito tempo (ou sumiu de vez): o próximo assume.
+      var foraMuito = c.pausaRemota === 'fora' && c.foraDesde && Date.now() - c.foraDesde > O.TEMPO_ANFITRIAO_FORA * 1000;
+      var mudo = Date.now() - c.ultimaMensagemEm > O.TEMPO_ANFITRIAO_MUDO * 1000;
+      if (foraMuito || mudo) { eleger(c); return; }
       var parado = Date.now() - c.ultimaMensagemEm > 2500;
       if (parado && !c.pausaRemota) mostrarPausaRemota(c, 'lento');
       else if (!parado && c.pausaRemota === 'lento') mostrarPausaRemota(c, 0);
@@ -650,6 +866,17 @@
   function receber(c, evento, p) {
     var jogo = IT.jogo;
 
+    // Mensagem de outro anfitrião: vale a eleição mais nova.
+    if (p && p.a && c.sala && p.a !== c.sala.anfitriao) {
+      if (!eleicaoMaisNova(c, p)) return;          // anfitrião antigo: ignora
+      if (c.anfitriao) virarCliente(c, p);         // eu era o anfitrião: agora não sou mais
+      else {
+        c.sala.anfitriao = p.a;
+        c.sala.eleicao = p.e || 0;
+        c.vistoAnfitriao = true;
+      }
+    }
+
     if (c.anfitriao) {
       if (evento === 'pedirSala') {
         enviar(c, 'sala', c.sala);
@@ -667,6 +894,8 @@
         });
       } else if (evento === 'pedirSnap') {
         if (jogo.rede === c && jogo.estado === 'jogando') enviarSnapshot(c);
+      } else if (evento === 'revanche') {
+        registrarVoto(c, p.cid);
       }
       return;
     }
@@ -704,7 +933,7 @@
       if (jogo.rede !== c) return;
       var j = p.id ? jogo.jogadorPorId(p.id) : null;
       IT.ui.mostrarMensagem(p.texto, p.tipo, j ? j.cor.escura : null);
-      jogo.vibrarPara(j, p.tipo);
+      jogo.efeitosPara(j, p.tipo, p.de ? jogo.jogadorPorId(p.de) : null);
     } else if (evento === 'pausa') {
       if (jogo.rede === c) { c.ultimaMensagemEm = Date.now(); mostrarPausaRemota(c, p.motivo || 'menu'); }
     } else if (evento === 'retomar') {
@@ -712,12 +941,41 @@
     } else if (evento === 'fim') {
       if (jogo.rede !== c || p.r !== c.rodada || jogo.estado !== 'jogando') return;
       jogo.mostrarFimRemoto(p.ranking, p.porTempo);
+    } else if (evento === 'votos') {
+      if (jogo.rede === c && jogo.estado === 'fim') {
+        IT.ui.mostrarVotosRevanche(p.nomes, p.total, p.cids.indexOf(c.cid) !== -1);
+      }
     } else if (evento === 'voltarSala') {
       IT.ui.avisoRede('');
       jogo.rede = null;
       jogo.irPara('sala');
       desenharSala();
     }
+  }
+
+  /* ---------- Convite por link ---------- */
+
+  function linkDaSala(codigo) {
+    return location.origin + location.pathname.replace(/index\.html$/, '') + '?sala=' + codigo.split('-')[1];
+  }
+
+  /* Compartilha o link (celular) ou copia (computador). */
+  function convidar() {
+    var c = con;
+    if (!c || !c.sala) return;
+    var link = linkDaSala(c.sala.codigo);
+    var texto = 'Vem pintar a ilha comigo! 🎨 Sala ' + c.sala.codigo;
+    if (navigator.share) {
+      navigator.share({ title: 'Ilhas de Tinta', text: texto, url: link }).catch(function () { /* cancelou */ });
+      return;
+    }
+    var copiar = navigator.clipboard && navigator.clipboard.writeText
+      ? navigator.clipboard.writeText(link) : Promise.reject();
+    copiar.then(function () {
+      avisoSala('Link copiado! Mande para seus amigos 😊');
+    }, function () {
+      avisoSala('Mande este link para seus amigos: ' + link);
+    });
   }
 
   /* ---------- API usada pelo game.js e pela interface ---------- */
@@ -748,7 +1006,11 @@
       $('online-voltar').addEventListener('click', function () { avisoOnline(''); IT.jogo.irPara('menu'); });
       $('sala-jogar').addEventListener('click', comecarPartida);
       $('sala-sair').addEventListener('click', function () { sair(''); });
+      $('sala-convidar').addEventListener('click', convidar);
       window.addEventListener('beforeunload', function () { fechar(con); });
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible' && con && con.esperandoVoltar) voltarComoJogador(con);
+      });
     },
 
     /* Botão "Jogar Online" do menu. */
@@ -760,6 +1022,19 @@
       ocupado(false);
       IT.jogo.irPara('online');
     },
+
+    /* Abriu o jogo por um link de convite (?sala=4821): já deixa o código pronto. */
+    abrirConvite: function (numeros) {
+      var codigo = normalizarCodigo(numeros);
+      if (!codigo) return;
+      IT.online.abrir();
+      if (IT.jogo.estado !== 'online') return; // sem internet/arquivo: o menu já mostrou o aviso
+      el.codigo.value = codigo.split('-')[1];
+      avisoOnline('Você foi convidado para a sala ' + codigo + '! 🎉 Escreva seu nome e toque em Entrar.');
+      el.aviso.classList.add('aviso-convite');
+    },
+
+    linkDaSala: linkDaSala,
 
     /* Usado nos testes. */
     conexao: function () { return con; },
@@ -787,8 +1062,14 @@
       this.motivoPausa = 0;
       enviar(this, 'retomar', {});
     },
+    /* "🔁 Revanche": vota. Quando todos os humanos votam, o anfitrião começa outra. */
     jogarDeNovo: function () {
-      if (this.anfitriao) comecarPartida();
+      var c = this;
+      if (c.anfitriao) registrarVoto(c, c.cid);
+      else {
+        enviar(c, 'revanche', { cid: c.cid });
+        IT.ui.mostrarVotosRevanche([c.nome + ' (você)'], humanosDaPartida(c).length || 1, true);
+      }
     },
     mudarJogadores: function () {
       var c = this;

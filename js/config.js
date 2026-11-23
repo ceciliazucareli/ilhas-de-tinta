@@ -41,7 +41,9 @@ window.IlhasDeTinta = window.IlhasDeTinta || {};
       SNAPSHOT_A_CADA: 3,           // segundos entre fotos completas do mapa
       TEMPO_CONEXAO: 8,             // segundos para desistir de conectar
       TEMPO_PROCURAR_SALA: 4,       // segundos esperando o anfitrião aparecer
-      NIVEL_DE_QUEM_SAI: 'medio'    // quem sai no meio da partida vira CPU deste nível
+      NIVEL_DE_QUEM_SAI: 'medio',   // quem sai no meio da partida vira CPU deste nível
+      TEMPO_ANFITRIAO_FORA: 15,     // anfitrião fora da tela por mais que isso: outro assume
+      TEMPO_ANFITRIAO_MUDO: 12      // nenhuma mensagem do anfitrião por mais que isso: outro assume
     },
 
     CORES: {
