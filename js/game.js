@@ -111,6 +111,18 @@
    * Regras aplicadas sempre que o explorador do jogador "j" chega numa célula.
    * Devolve false quando o movimento dele deve ser interrompido.
    */
+  /*
+   * Online (issue #7): o anfitrião guarda as últimas chegadas de cada explorador
+   * para poder aplicar uma virada que chegou atrasada pela internet na célula
+   * certa ("rebobinar"). Só pode rebobinar por cima de chegadas "simples" (que
+   * só pintaram rastro); qualquer evento (captura, corte, Ops!) zera o histórico.
+   */
+  function lembrarChegada(j, x, y, pintouRastro, evento) {
+    if (!jogo.rede) return;
+    if (evento) { j.historico = []; return; }
+    j.historico = (j.historico || []).concat([{ x: x, y: y, pintou: pintouRastro }]).slice(-3);
+  }
+
   function aoChegar(j, x, y) {
     var grade = jogo.grade;
     var rastro = grade.rastro(x, y);
@@ -118,6 +130,7 @@
     if (rastro === j.id) {
       // Pisou no próprio rastro: penalidade suave, sem "morte".
       j.estatisticas.proprioRastro++;
+      lembrarChegada(j, x, y, false, true);
       penalizar(j, jogo.modo === 'solo' ? 'Ops! Tente de novo 🙂' : 'Ops, ' + j.nome + '! Tente de novo 🙂');
       return false;
     }
@@ -129,6 +142,8 @@
       if (outro.explorador.x !== x || outro.explorador.y !== y) {
         j.estatisticas.cortes++;
         outro.estatisticas.rastroCortado++;
+        lembrarChegada(j, x, y, false, true);
+        outro.historico = [];
         penalizar(outro, '✂️ ' + j.nome + ' cortou o rastro de ' + outro.nome + '!', j);
       }
     }
@@ -138,6 +153,7 @@
       if (grade.temRastro(j.id)) {
         var ganhas = grade.capturar(j.id);
         j.estatisticas.capturas++;
+        lembrarChegada(j, x, y, false, true);
         darIlhaNovaParaQuemFicouSem();
         IT.ui.atualizarHUD(jogo);
         if (verificarFim()) return false;
@@ -149,12 +165,15 @@
       }
       j.explorador.travarMeiaVolta = false;
       j.ultimoSeguro = { x: x, y: y };
+      lembrarChegada(j, x, y, false, false);
       return true;
     }
 
     // Fora de casa (grama ou território de outro): deixa tinta.
-    if (grade.rastro(x, y) === 0) grade.setRastro(x, y, j.id);
+    var pintou = grade.rastro(x, y) === 0;
+    if (pintou) grade.setRastro(x, y, j.id);
     j.explorador.travarMeiaVolta = true;
+    lembrarChegada(j, x, y, pintou, false);
     return true;
   }
 
@@ -496,7 +515,17 @@
   function interpolar(dt) {
     jogo.jogadores.forEach(function (j) {
       var e = j.explorador;
-      if (e.direcao) e.progresso = Math.min(1, e.progresso + dt * C.VELOCIDADE * e.velocidade);
+      if (j.tipo === 'humano' && j.local) {
+        // Previsão (issue #7): o MEU explorador anda aqui mesmo, célula a célula,
+        // e vira na hora em que eu peço. As regras (rastro, captura, Ops!) seguem
+        // sendo do anfitrião; o estado dele corrige esta previsão se divergir.
+        e.atualizar(dt, jogo.grade, null);
+      } else {
+        // Os outros: seguem em linha reta célula a célula até a próxima mensagem do
+        // anfitrião (que chega 6x por segundo) — se divergir, deslizam até a posição certa.
+        e.atualizar(dt, jogo.grade, null);
+      }
+      e.suavizar(dt);
     });
   }
 

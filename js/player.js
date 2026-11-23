@@ -58,9 +58,28 @@
   /* Posição "visual" em células (com fração), usada pelo renderer. */
   Explorador.prototype.posicaoVisual = function () {
     return {
-      x: this.x + (this.alvoX - this.x) * this.progresso,
-      y: this.y + (this.alvoY - this.y) * this.progresso
+      x: this.x + (this.alvoX - this.x) * this.progresso + (this.ajusteX || 0),
+      y: this.y + (this.alvoY - this.y) * this.progresso + (this.ajusteY || 0)
     };
+  };
+
+  /*
+   * Online (issue #7): quando a posição prevista aqui diverge da do anfitrião,
+   * o explorador vai para a posição certa, mas o desenho "desliza" até lá em
+   * vez de pular (o ajuste some em ~150 ms).
+   */
+  Explorador.prototype.corrigirSuave = function (deX, deY) {
+    var agora = this.posicaoVisual();
+    this.ajusteX = (this.ajusteX || 0) + (deX - agora.x);
+    this.ajusteY = (this.ajusteY || 0) + (deY - agora.y);
+  };
+
+  Explorador.prototype.suavizar = function (dt) {
+    if (!this.ajusteX && !this.ajusteY) return;
+    var k = Math.exp(-dt * 20);
+    this.ajusteX *= k; this.ajusteY *= k;
+    if (Math.abs(this.ajusteX) < 0.01) this.ajusteX = 0;
+    if (Math.abs(this.ajusteY) < 0.01) this.ajusteY = 0;
   };
 
   /* Teleporta para uma célula e fica parado. */

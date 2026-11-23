@@ -5,7 +5,7 @@
  * o "anfitrião" e roda a simulação de verdade (o mesmo código do modo offline,
  * inclusive as CPUs). O Supabase só repassa mensagens entre os aparelhos.
  *
- *   anfitrião ──(10x/s: posições + células que mudaram; foto completa a cada 3 s)──▶ clientes
+ *   anfitrião ──(6x/s: posições + células que mudaram; foto completa a cada 3 s)──▶ clientes
  *   clientes  ──(só quando apertam uma tecla: nova direção)──────────────────────────▶ anfitrião
  *
  * Presence mostra quem está na sala. Se o anfitrião sai, os outros voltam ao
@@ -30,6 +30,7 @@
  *   pedirEstado  cliente → anfitrião  "voltei / cheguei no meio: me mande tudo"
  *   estadoCompleto anfitrião → um  configuração + foto completa (quem reconectou,
  *                                  recarregou ou chegou no meio — esse assiste)
+ *   tchau     qualquer um → todos  "saí de propósito" (sem esperar a tolerância)
  *   pausa     anfitrião → todos   partida pausada (motivo: 'menu' ou 'fora' = saiu da tela)
  *   retomar   anfitrião → todos   partida continua
  *
@@ -180,6 +181,7 @@
 
     canal.on('broadcast', { event: '*' }, function (m) {
       if (!ativo() || con !== c) return;
+      contar('recebidas', m.event, m.payload);
       try { receber(c, m.event, m.payload || {}); } catch (erro) { console.error('Mensagem online com problema:', erro); }
     });
     canal.on('presence', { event: 'sync' }, function () {
@@ -218,12 +220,22 @@
     });
   }
 
+  /* Contagem de mensagens e bytes (issue #5: medir o consumo do plano grátis). */
+  var contagem = { enviadas: {}, recebidas: {}, bytesEnviados: 0, bytesRecebidos: 0, desde: Date.now() };
+  function contar(tipo, evento, dados) {
+    contagem[tipo][evento] = (contagem[tipo][evento] || 0) + 1;
+    var n = 0;
+    try { n = JSON.stringify(dados).length; } catch (e) { /* ignora */ }
+    if (tipo === 'enviadas') contagem.bytesEnviados += n; else contagem.bytesRecebidos += n;
+  }
+
   function enviar(c, evento, dados) {
     if (!c || c.fechada) return;
     if (c.anfitriao && dados && typeof dados === 'object' && c.sala) {
       dados.a = c.cid;                    // quem está mandando como anfitrião
       dados.e = c.sala.eleicao || 0;      // de qual "eleição" de anfitrião
     }
+    contar('enviadas', evento, dados);
     c.canal.send({ type: 'broadcast', event: evento, payload: dados }).catch(function (erro) {
       console.warn('Falha ao enviar', evento, erro);
     });
@@ -390,6 +402,8 @@
   function sair(mensagem) {
     var c = con;
     con = null;
+    // Saída de propósito: avisa os outros para não esperarem a tolerância de quedas.
+    if (c && !c.fechada && c.inscrito) enviar(c, 'tchau', { cid: c.cid });
     fechar(c);
     limparSessao();
     IT.ui.avisoRede('');
@@ -742,8 +756,10 @@
     c.sala.rodada++;
     c.rodada = c.sala.rodada;
     c.seq = 0;
-    enviar(c, 'sala', c.sala);
+    // 'inicio' antes de 'sala': quem recebe a sala já "jogando" sem ter recebido o
+    // início acharia que chegou no meio e pediria o estado completo à toa.
     enviar(c, 'inicio', { r: c.rodada, configuracao: JSON.parse(JSON.stringify(configuracao)) });
+    enviar(c, 'sala', c.sala);
 
     var jogo = IT.jogo;
     jogo.rede = c;
@@ -792,7 +808,7 @@
     };
   }
 
-  /* Anfitrião: manda o estado 10x/s (com foto completa de tempos em tempos). */
+  /* Anfitrião: manda o estado O.ENVIOS_POR_SEGUNDO (6) vezes por segundo, com foto completa de tempos em tempos. */
   function transmitir(c) {
     var jogo = IT.jogo;
     c.timers.forEach(function (t) { clearInterval(t); });
@@ -802,6 +818,8 @@
     c.timers.push(setInterval(function () {
       if (jogo.rede !== c || jogo.estado !== 'jogando') return;
       envios++;
+      // Pausado: nada muda — manda só 1 por segundo (para ninguém achar que caiu).
+      if (jogo.pausado && envios % O.ENVIOS_POR_SEGUNDO !== 0) return;
       if (envios % porSnapshot === 0) enviarSnapshot(c);
       else enviarEstado(c);
     }, 1000 / O.ENVIOS_POR_SEGUNDO));
@@ -964,7 +982,8 @@
     return IT.jogo.jogadores.map(function (j) {
       var e = j.explorador;
       return [e.x, e.y, e.alvoX, e.alvoY, Math.round(e.progresso * 100),
-        e.direcao ? DIRS.indexOf(e.direcao) : -1, DIRS.indexOf(e.ultimaDirecao), j.cacando ? 1 : 0];
+        e.direcao ? DIRS.indexOf(e.direcao) : -1, DIRS.indexOf(e.ultimaDirecao), j.cacando ? 1 : 0,
+        j.ultimaEntrada || 0];  // [8] última virada do jogador já aplicada (previsão, issue #7)
     });
   }
 
@@ -998,6 +1017,69 @@
       d: Array.prototype.join.call(g.donos, ''),
       k: Array.prototype.join.call(g.rastros, '')
     });
+  }
+
+  /*
+   * Anfitrião (issue #7): a virada chega com a célula onde a pessoa quis virar
+   * (x, y) — a próxima em que o explorador dela chegaria. Por causa do atraso da
+   * internet, o explorador aqui pode já ter passado por essa célula: se passou
+   * há pouco (e seguiu reto), "rebobina" e vira de lá; se ainda vai chegar, vira
+   * ao chegar. Assim a virada acontece na célula certa, como no modo offline.
+   */
+  var estatViradas = { exatas: 0, rebobinadas: 0, atrasadas: 0, antigoAtrasaria: 0 };
+  function aplicarViradaRemota(c, j, d, p) {
+    var e = j.explorador;
+    j.ultimaEntrada = Math.max(j.ultimaEntrada || 0, p.n || 0);
+    if (typeof p.x !== 'number') { e.pedirDirecao(d); return; }
+    // No modelo antigo a virada valia "na próxima célula" do anfitrião: atrasaria se ela não for a pedida.
+    if (!(e.direcao && e.alvoX === p.x && e.alvoY === p.y) && !(!e.direcao && e.x === p.x && e.y === p.y)) estatViradas.antigoAtrasaria++;
+    if (!e.direcao || (e.alvoX === p.x && e.alvoY === p.y)) {
+      e.pedirDirecao(d);
+      estatViradas.exatas++;
+      return;
+    }
+    if (rebobinar(j, d, p.x, p.y)) {
+      estatViradas.rebobinadas++;
+    } else {
+      e.pedirDirecao(d);
+      estatViradas.atrasadas++;
+    }
+  }
+  function jogo() { return IT.jogo; }
+
+  /*
+   * O explorador já passou da célula (x, y) há até 2 células, seguindo reto e só
+   * pintando rastro: desfaz esse rastro "a mais", volta para (x, y) e vira de lá.
+   */
+  function rebobinar(j, d, x, y) {
+    var e = j.explorador, g = jogo().grade, hist = j.historico || [];
+    var k = -1;
+    for (var i = hist.length - 1; i >= 0; i--) if (hist[i].x === x && hist[i].y === y) { k = i; break; }
+    if (k < 0 || hist.length - 1 - k > 2) return false;
+    // Direção em que ele saiu de (x, y): de hist[k] para a próxima chegada (ou para o alvo atual).
+    var prox = hist[k + 1] || { x: e.alvoX, y: e.alvoY };
+    var saida = null;
+    Object.keys(IT.DIRECOES).forEach(function (nome) {
+      var v = IT.DIRECOES[nome];
+      if (x + v.x === prox.x && y + v.y === prox.y) saida = nome;
+    });
+    if (!saida || d === saida || d === IT.OPOSTA[saida]) return false;
+    var v = IT.DIRECOES[d];
+    if (!g.dentro(x + v.x, y + v.y)) return false;
+    // Desfaz o rastro pintado depois de (x, y).
+    for (var m = k + 1; m < hist.length; m++) {
+      if (hist[m].pintou && g.rastro(hist[m].x, hist[m].y) === j.id) g.setRastro(hist[m].x, hist[m].y, 0);
+    }
+    j.historico = hist.slice(0, k + 1);
+    e.x = x; e.y = y;
+    e.direcao = d;
+    e.ultimaDirecao = d;
+    e.alvoX = x + v.x;
+    e.alvoY = y + v.y;
+    e.proximaDirecao = null;
+    e.filaDirecao = null;
+    e.travarMeiaVolta = g.temRastro(j.id);
+    return true;
   }
 
   /* ---------- Revanche (votação) ---------- */
@@ -1034,17 +1116,84 @@
 
   /* ---------- Partida: cliente ---------- */
 
-  function aplicarJogadores(lista) {
+  function aplicarJogadores(lista, c) {
     var jogadores = IT.jogo.jogadores;
     lista.forEach(function (p, i) {
       var e = jogadores[i] && jogadores[i].explorador;
       if (!e) return;
+      if (c && jogadores[i].tipo === 'humano' && jogadores[i].local && reconciliar(c, jogadores[i], p)) return;
+      if (c && seguirPrevisaoDosOutros(e, p)) { jogadores[i].cacando = !!p[7]; return; }
       e.x = p[0]; e.y = p[1]; e.alvoX = p[2]; e.alvoY = p[3];
       e.progresso = p[4] / 100;
       e.direcao = p[5] >= 0 ? DIRS[p[5]] : null;
       e.ultimaDirecao = DIRS[p[6]] || e.ultimaDirecao;
       jogadores[i].cacando = !!p[7]; // Impossível 😈 caçando (mostra o aviso)
     });
+  }
+
+  /*
+   * Cliente (issue #7): o meu explorador anda por previsão aqui. Quando chega o
+   * estado do anfitrião (um pouco "velho", pelo atraso da internet), mantém a
+   * previsão se ela bate; senão vai para a posição do anfitrião deslizando.
+   * Devolve true se manteve a previsão.
+   */
+  var medidasVirada = { pedidas: 0, mostradaNaHoraMs: [], anfitriaoConfirmouMs: [], correcoes: 0, mantidas: 0 };
+  function reconciliar(c, j, p) {
+    var e = j.explorador;
+    var ack = p[8] || 0, pendente = (c.entradas || 0) > ack;
+    if (c.viradaPendente && ack >= c.viradaPendente.n && p[5] === DIRS.indexOf(c.viradaPendente.d)) {
+      medidasVirada.anfitriaoConfirmouMs.push(Date.now() - c.viradaPendente.quando);
+      c.viradaPendente = null;
+    }
+    var hx = p[0] + (p[2] - p[0]) * p[4] / 100, hy = p[1] + (p[3] - p[1]) * p[4] / 100;
+    var minha = e.posicaoVisual();
+    var dist = Math.abs(minha.x - (e.ajusteX || 0) - hx) + Math.abs(minha.y - (e.ajusteY || 0) - hy);
+    var mesmaDirecao = (p[5] >= 0 ? DIRS[p[5]] : null) === e.direcao;
+    j.cacando = !!p[7];
+    if ((pendente && dist <= 2.5) || (!pendente && mesmaDirecao && dist <= 1.5)) {
+      medidasVirada.mantidas++;
+      return true; // a previsão está certa (só um pouco à frente, pelo atraso)
+    }
+    // Divergiu (Ops!, corte, virada que o anfitrião não aceitou...): vai para a posição dele, deslizando.
+    medidasVirada.correcoes++;
+    var de = e.posicaoVisual();
+    e.x = p[0]; e.y = p[1]; e.alvoX = p[2]; e.alvoY = p[3];
+    e.progresso = p[4] / 100;
+    e.direcao = p[5] >= 0 ? DIRS[p[5]] : null;
+    e.ultimaDirecao = DIRS[p[6]] || e.ultimaDirecao;
+    e.proximaDirecao = null;
+    if (Math.abs(de.x - hx) + Math.abs(de.y - hy) < 4) e.corrigirSuave(de.x, de.y); // teleporte grande: sem deslizar
+    // Uma virada minha que o anfitrião ainda não aplicou continua pedida.
+    if (pendente && c.viradaPendente) e.pedirDirecao(c.viradaPendente.d);
+    return true;
+  }
+
+  /*
+   * Os exploradores dos OUTROS também andam aqui entre uma mensagem e outra
+   * (6 por segundo). A mensagem do anfitrião é um pouco "velha" (atraso da
+   * internet): se ele está na mesma direção e até 1,5 célula atrás da nossa
+   * previsão, mantemos a previsão (senão ele "voltaria" a cada mensagem);
+   * se divergiu (virou, Ops!), vai para a posição certa deslizando.
+   */
+  function seguirPrevisaoDosOutros(e, p) {
+    var hx = p[0] + (p[2] - p[0]) * p[4] / 100, hy = p[1] + (p[3] - p[1]) * p[4] / 100;
+    var dirH = p[5] >= 0 ? DIRS[p[5]] : null;
+    var minha = e.posicaoVisual();
+    var px_ = minha.x - (e.ajusteX || 0), py_ = minha.y - (e.ajusteY || 0);
+    if (dirH && dirH === e.direcao) {
+      var v = IT.DIRECOES[dirH];
+      var aFrente = (px_ - hx) * v.x + (py_ - hy) * v.y;           // quanto a previsão está à frente
+      var deLado = Math.abs((px_ - hx) * v.y) + Math.abs((py_ - hy) * v.x);
+      if (aFrente >= -0.05 && aFrente <= 1.5 && deLado < 0.05) return true;
+    }
+    var de = e.posicaoVisual();
+    e.x = p[0]; e.y = p[1]; e.alvoX = p[2]; e.alvoY = p[3];
+    e.progresso = p[4] / 100;
+    e.direcao = dirH;
+    e.ultimaDirecao = DIRS[p[6]] || e.ultimaDirecao;
+    e.proximaDirecao = null;
+    if (Math.abs(de.x - hx) + Math.abs(de.y - hy) < 4) e.corrigirSuave(de.x, de.y);
+    return true;
   }
 
   function aplicarEstado(c, p, foto) {
@@ -1071,7 +1220,7 @@
     c.ultimaMensagemEm = Date.now();
     if (!foto) mostrarPausaRemota(c, p.pa || 0);
     if (jogo.estado === 'jogando') {
-      aplicarJogadores(p.j);
+      aplicarJogadores(p.j, c);
       jogo.tempoRestante = p.t;
       IT.ui.atualizarHUD(jogo);
       IT.ui.atualizarRelogio(p.t);
@@ -1126,6 +1275,11 @@
     if (!c.vigiando) { c.vigiando = true; vigiarAnfitriao(c); }
   }
 
+  function foraDaPartida(c, rodada) {
+    var jogo = IT.jogo;
+    return jogo.rede !== c || (jogo.estado !== 'jogando' && jogo.estado !== 'fim') || c.rodada !== rodada;
+  }
+
   /* ---------- Mensagens recebidas ---------- */
 
   function receber(c, evento, p) {
@@ -1155,7 +1309,7 @@
       } else if (evento === 'dir') {
         if (jogo.rede !== c || jogo.estado !== 'jogando') return;
         jogo.jogadores.forEach(function (j) {
-          if (j.cid === p.cid && j.tipo === 'humano' && DIRS[p.d]) j.explorador.pedirDirecao(DIRS[p.d]);
+          if (j.cid === p.cid && j.tipo === 'humano' && DIRS[p.d]) aplicarViradaRemota(c, j, DIRS[p.d], p);
         });
       } else if (evento === 'pedirSnap') {
         if (jogo.rede === c && jogo.estado === 'jogando') enviarSnapshot(c);
@@ -1164,11 +1318,32 @@
         enviarEstadoCompleto(c, p.cid);
       } else if (evento === 'revanche') {
         registrarVoto(c, p.cid);
+      } else if (evento === 'tchau') {
+        var saiu = c.sala.membros.filter(function (x) { return x.cid === p.cid; })[0];
+        if (saiu) {
+          var emJogo = jogo.rede === c && jogo.estado === 'jogando';
+          if (emJogo) jogo.jogadores.forEach(function (j) {
+            if (j.cid === saiu.cid && j.tipo === 'humano') jogo.transformarEmCPU(j, O.NIVEL_DE_QUEM_SAI);
+          });
+          c.sala.membros = c.sala.membros.filter(function (x) { return x !== saiu; });
+          c.sala.cpus = Math.min(c.sala.cpus, IT.config.MAX_JOGADORES - c.sala.membros.length);
+          var texto = saiu.nome + ' saiu da sala' + (emJogo ? '. A CPU continua no lugar! 🤖' : '. 👋');
+          IT.ui.mostrarMensagem(texto, 'aviso');
+          enviar(c, 'msg', { texto: texto, tipo: 'aviso', id: 0 });
+          if (jogo.estado === 'fim' && jogo.rede === c && c.votos) registrarVoto(c, '-');
+          enviar(c, 'sala', c.sala);
+          desenharSala();
+          salvarSessao(c);
+        }
       }
       return;
     }
 
     // Cliente.
+    if (evento === 'tchau') {
+      if (c.sala && p.cid === c.sala.anfitriao) eleger(c);
+      return;
+    }
     if (evento === 'sala') {
       c.ultimaSalaEm = Date.now(); // "sinal de vida" do anfitrião fora da partida
       var primeira = !c.sala;
@@ -1188,10 +1363,14 @@
       }
       // Partida em andamento e eu ainda não estou nela (cheguei no meio ou voltei):
       // peço o estado completo — quem não estava na partida assiste até a próxima.
-      var foraDoJogo = jogo.rede !== c || (jogo.estado !== 'jogando' && jogo.estado !== 'fim') || c.rodada !== p.rodada;
-      if ((p.estado === 'jogando' || p.estado === 'fim') && foraDoJogo && Date.now() - (c.pediuEstadoEm || 0) > 2000) {
-        c.pediuEstadoEm = Date.now();
-        enviar(c, 'pedirEstado', { cid: c.cid });
+      if ((p.estado === 'jogando' || p.estado === 'fim') && foraDaPartida(c, p.rodada) && !c.esperandoEstado) {
+        // Espera um pouco: se o 'inicio' estiver a caminho, não precisa pedir nada.
+        c.esperandoEstado = true;
+        var rodada = p.rodada;
+        c.timers.push(setTimeout(function () {
+          c.esperandoEstado = false;
+          if (con === c && foraDaPartida(c, rodada)) enviar(c, 'pedirEstado', { cid: c.cid });
+        }, 1500));
       }
       salvarSessao(c);
       desenharSala();
@@ -1397,10 +1576,26 @@
       return true;
     },
 
-    /* Usado nos testes. */
+    /* Usado nos testes e nas medições (issues #5 e #7). */
     conexao: function () { return con; },
+    contagem: function () { return contagem; },
+    zerarContagem: function () {
+      contagem = { enviadas: {}, recebidas: {}, bytesEnviados: 0, bytesRecebidos: 0, desde: Date.now() };
+      medidasVirada = { pedidas: 0, mostradaNaHoraMs: [], anfitriaoConfirmouMs: [], correcoes: 0, mantidas: 0 };
+      estatViradas = { exatas: 0, rebobinadas: 0, atrasadas: 0, antigoAtrasaria: 0 };
+    },
+    medidasVirada: function () { return { cliente: medidasVirada, anfitriao: estatViradas }; },
     sair: sair
   };
+
+  /* Mede quanto tempo a virada leva para aparecer na tela deste aparelho. */
+  function medirViradaLocal(e, d, inicio) {
+    var limite = inicio + 2000;
+    (function checar() {
+      if (e.direcao === d) { medidasVirada.mostradaNaHoraMs.push(Date.now() - inicio); return; }
+      if (Date.now() < limite) requestAnimationFrame(checar);
+    })();
+  }
 
   /* Métodos que o game.js chama em jogo.rede (a conexão da sala). */
   var MetodosRede = {
@@ -1412,7 +1607,16 @@
       // Cliente: meia-volta é recusada aqui mesmo (o anfitrião também recusaria).
       var e = meu.explorador;
       if (e.direcao && IT.OPOSTA[e.direcao] === direcao) return false;
-      enviar(c, 'dir', { cid: c.cid, d: DIRS.indexOf(direcao) });
+      if (e.direcao === direcao && !e.proximaDirecao) return false; // nada muda: não gasta mensagem
+      // Onde a virada acontece: na próxima célula em que eu chego (ou aqui, se parado).
+      var x = e.direcao ? e.alvoX : e.x, y = e.direcao ? e.alvoY : e.y;
+      c.entradas = (c.entradas || 0) + 1;
+      enviar(c, 'dir', { cid: c.cid, d: DIRS.indexOf(direcao), x: x, y: y, n: c.entradas });
+      // Previsão (issue #7): mostra a virada aqui na hora, sem esperar o anfitrião.
+      e.pedirDirecao(direcao);
+      c.viradaPendente = { n: c.entradas, d: direcao, quando: Date.now() };
+      medidasVirada.pedidas++;
+      medirViradaLocal(e, direcao, Date.now());
       return true;
     },
     pausar: function (motivo) {

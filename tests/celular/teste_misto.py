@@ -113,11 +113,11 @@ def jogar_rodada(cel, desk, anfitriao_cel, nome_foto):
             ok(desk.js('document.getElementById("aviso-rede").hidden'), 'anfitrião tocou em Continuar: aviso sumiu no desktop')
             inicio += 4.5  # o tempo pausado não conta
 
-            # Agora o celular-anfitrião fica FORA da tela por mais de 15 s: o desktop assume.
+            # Agora o celular-anfitrião fica FORA da tela por mais de 30 s (tolerância): o desktop assume.
             cel.js('Object.defineProperty(document, "visibilityState", {configurable: true, get: function(){return "hidden"}}); document.dispatchEvent(new Event("visibilitychange"))')
             t0 = time.time()
             try:
-                desk.esperar('IlhasDeTinta.online.conexao().anfitriao', 25); assumiu = True
+                desk.esperar('IlhasDeTinta.online.conexao().anfitriao', 50); assumiu = True
             except TimeoutError: assumiu = False
             ok(assumiu, 'celular-anfitrião fora da tela: o desktop assumiu a partida depois de %.0f s' % (time.time() - t0))
             t1 = desk.js('IlhasDeTinta.jogo.tempoRestante'); time.sleep(2)
