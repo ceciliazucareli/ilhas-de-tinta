@@ -67,5 +67,39 @@ window.IlhasDeTinta.campeoes = {
    "esperaEmCasa": 0,
    "raioPerigo": 4.6610000000000005
   }
+ },
+ "4j": {
+  "genes": [
+   0.6892,
+   0.9742,
+   0.9618,
+   0.8736,
+   0.1996,
+   0.4282,
+   0.3195,
+   0.3693,
+   0.0019,
+   0.3162,
+   0.6639,
+   0.639,
+   0,
+   0.1383
+  ],
+  "parametros": {
+   "profundidadeMax": 8,
+   "larguraMax": 11,
+   "candidatos": 10,
+   "rastroMax": 35,
+   "medo": 2,
+   "margemSeguranca": 1.4256000000000002,
+   "alcanceCaca": 6,
+   "respiro": 2.2158,
+   "vigia": -1,
+   "pesoRoubo": 1.2648,
+   "pesoBorda": 0.6556000000000002,
+   "cautela": 0.639,
+   "esperaEmCasa": 0,
+   "raioPerigo": 1.383
+  }
  }
 };
