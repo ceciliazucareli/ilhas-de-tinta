@@ -445,3 +445,36 @@ body.espectador #botao-jogar-de-novo { display: none; }
   .dica-inicio { bottom: 10%; }
 }
 }
+
+/* ---------- Turma fixa, QR e nome lembrado (online) ---------- */
+.online-convite {
+  margin: 8px auto 0; max-width: 360px; padding: 10px 14px; border-radius: 16px;
+  background: #e8f4ff; color: #2a76d2; font-weight: 800;
+}
+.online-convite[hidden], .online-turmas[hidden], .online-nova-turma[hidden],
+#online-entrar-convite[hidden], #online-codigo-bloco[hidden], #online-criar-bloco[hidden],
+#online-tenho-codigo[hidden], .sala-form-nome[hidden], #sala-trocar-nome[hidden], .tela-qr[hidden] { display: none; }
+.online-lista-turmas { list-style: none; margin: 10px auto 0; padding: 0; display: grid; gap: 10px; max-width: 380px; }
+.online-lista-turmas li { display: flex; align-items: center; gap: 6px; }
+.botao-turma {
+  flex: 1; font-size: 1.25rem; padding: 14px 16px; background: #4fa6ff; box-shadow: 0 6px 0 #2a76d2;
+}
+.botao-turma:active { box-shadow: 0 3px 0 #2a76d2; }
+.botao-remover {
+  min-width: 44px; min-height: 44px; border: none; border-radius: 50%; background: #eef0fb;
+  color: #6a6f93; font: inherit; font-weight: 800; cursor: pointer;
+}
+#online-criar-turma { margin-top: 10px; font-size: 1.1rem; padding: 10px 24px; }
+.online-nova-turma { margin-top: 6px; }
+.online-nova-turma .dica { max-width: 340px; margin: 8px auto 0; }
+.sala-convite { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.sala-meu-nome { justify-content: center; margin-top: 12px; flex-wrap: wrap; gap: 6px; }
+.sala-meu-nome-texto { font-weight: 800; font-size: 1.15rem; }
+.sala-form-nome { display: inline-flex; gap: 6px; align-items: center; }
+.sala-form-nome .campo-texto { width: 9.5em; padding: 6px 10px; font-size: 1.05rem; }
+.botao-pequeno { font-size: 1rem; padding: 8px 16px; }
+.tela-qr { z-index: 40; }
+.tela-qr .cartao { text-align: center; }
+.qr-canvas { position: static; inset: auto; display: block; margin: 10px auto; border-radius: 12px; image-rendering: pixelated; }
+.qr-link { margin: 0 auto 6px; max-width: 320px; font-size: 0.85rem; color: #6a6f93; overflow-wrap: anywhere; }
+.sala-codigo.sala-codigo-turma { font-size: 2.1rem; letter-spacing: 0.02em; user-select: text; }

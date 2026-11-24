@@ -122,11 +122,32 @@
       <div id="tela-online" class="sobreposicao tela-cheia" hidden>
         <div class="cartao cartao-menu">
           <h2>Jogar Online 🌍</h2>
+          <!-- Convite aberto por link (?turma= ou ?sala=) sem nome lembrado -->
+          <p id="online-convite" class="online-convite" hidden></p>
+          <!-- Turmas que este aparelho já usou: um toque e entra -->
+          <div id="online-turmas" class="online-turmas" hidden>
+            <ul id="online-lista-turmas" class="online-lista-turmas"></ul>
+          </div>
           <label class="campo">
             <span>Seu nome</span>
             <input id="online-nome" class="campo-texto" maxlength="12" autocomplete="off" placeholder="Seu nome">
           </label>
-          <button id="online-criar" class="botao botao-grande">✨ Criar sala</button>
+          <button id="online-entrar-convite" class="botao botao-grande" hidden>🚪 Entrar</button>
+          <div id="online-criar-bloco">
+            <button id="online-criar" class="botao botao-grande">✨ Criar sala</button>
+            <button id="online-criar-turma" class="botao botao-secundario">👭 Criar uma turma</button>
+            <div id="online-nova-turma" class="online-nova-turma" hidden>
+              <label class="campo">
+                <span>Nome da turma</span>
+                <input id="online-turma-nome" class="campo-texto" maxlength="16" autocomplete="off" placeholder="gatinhas">
+              </label>
+              <button id="online-turma-confirmar" class="botao botao-grande">✨ Criar turma</button>
+              <p class="dica">A turma tem um link que não muda: mande uma vez e as amigas entram sempre pela mesma sala.</p>
+            </div>
+          </div>
+          <!-- Código da sala (pode virar só "Tenho um código": config.ONLINE.CODIGO_NO_MENU) -->
+          <button id="online-tenho-codigo" class="botao-link" hidden>Tenho um código</button>
+          <div id="online-codigo-bloco">
           <p class="ou">ou</p>
           <label class="campo">
             <span>Código da sala</span>
@@ -139,6 +160,7 @@
             </span>
           </label>
           <button id="online-entrar" class="botao botao-grande">🚪 Entrar</button>
+          </div>
           <p id="online-aviso" class="aviso-online" role="status" aria-live="polite"></p>
           <button id="online-voltar" class="botao botao-secundario">Voltar</button>
         </div>
@@ -147,13 +169,26 @@
       <!-- Sala de espera online -->
       <div id="tela-sala" class="sobreposicao tela-cheia" hidden>
         <div class="cartao cartao-largo">
-          <p class="sala-rotulo">Código da sala</p>
+          <p id="sala-rotulo" class="sala-rotulo">Código da sala</p>
           <p id="sala-codigo" class="sala-codigo">TINTA-0000</p>
-          <button id="sala-convidar" class="botao botao-secundario botao-convidar">🔗 Convidar amigos</button>
+          <div class="sala-convite">
+            <button id="sala-convidar" class="botao botao-secundario botao-convidar">🔗 Convidar amigos</button>
+            <button id="sala-qr" class="botao botao-secundario botao-convidar">📱 Mostrar QR</button>
+          </div>
           <p id="sala-dica" class="dica">Diga este código para seus amigos entrarem!</p>
 
           <p class="setup-titulo">Quem já chegou</p>
           <ul id="sala-jogadores" class="sala-jogadores"></ul>
+
+          <div class="vaga-linha sala-meu-nome">
+            <span class="vaga-rotulo">Seu nome</span>
+            <span id="sala-meu-nome" class="sala-meu-nome-texto"></span>
+            <button id="sala-trocar-nome" class="botao-link">✏️ trocar</button>
+            <span id="sala-form-nome" class="sala-form-nome" hidden>
+              <input id="sala-novo-nome" class="campo-texto" maxlength="12" autocomplete="off" aria-label="Novo nome">
+              <button id="sala-salvar-nome" class="botao botao-pequeno">OK</button>
+            </span>
+          </div>
 
           <div class="vaga-linha sala-minha-cor">
             <span class="vaga-rotulo">Sua cor</span>
@@ -173,6 +208,16 @@
           </div>
           <p id="sala-aviso" class="aviso-online" role="status" aria-live="polite"></p>
           <button id="sala-sair" class="botao botao-secundario">Sair da sala</button>
+        </div>
+      </div>
+
+      <!-- QR code do link da sala/turma (para as amigas lerem com a câmera) -->
+      <div id="tela-qr" class="sobreposicao tela-cheia tela-qr" hidden>
+        <div class="cartao">
+          <h2 id="qr-titulo">Aponte a câmera 📱</h2>
+          <canvas id="qr-canvas" class="qr-canvas" role="img" aria-label="QR code do link"></canvas>
+          <p id="qr-link" class="qr-link"></p>
+          <button id="qr-fechar" class="botao botao-grande">Fechar</button>
         </div>
       </div>
 
@@ -238,6 +283,8 @@
   <script src="js/setup.js"></script>
   <!-- Online: biblioteca do Supabase (cópia local, versão fixa) + sala/sincronização -->
   <script src="js/vendor/supabase-2.119.0.umd.js"></script>
+  <script src="js/vendor/qrcode-generator-1.4.4.js"></script>
+  <script src="js/turma.js"></script>
   <script src="js/online.js"></script>
   <script src="js/instalar.js"></script>
   <script src="js/tutorial.js"></script>

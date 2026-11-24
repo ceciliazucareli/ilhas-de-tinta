@@ -95,10 +95,11 @@
       atualizarMenu();
       iniciarServiceWorker();
 
-      // Atalhos do ícone instalado e link de convite (?sala=4821).
+      // Atalhos do ícone instalado, link da turma (?turma=gatinhas-k7m2x) e convite (?sala=4821).
       var params = new URLSearchParams(location.search);
       var abrir = params.get('abrir');
-      if (params.get('sala') && IT.online) IT.online.abrirConvite(params.get('sala'));
+      if (params.get('turma') && IT.online) IT.online.abrirTurma(params.get('turma'));
+      else if (params.get('sala') && IT.online) IT.online.abrirConvite(params.get('sala'));
       else if (abrir === 'offline') IT.jogo.irPara('configuracao');
       else if (abrir === 'online' && IT.online) IT.online.abrir();
     },

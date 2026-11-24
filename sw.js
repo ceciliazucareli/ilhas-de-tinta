@@ -9,7 +9,7 @@
  * Estratégia: "cache primeiro". O modo Online continua precisando de internet
  * (as conexões com o Supabase não passam pelo cache).
  */
-var VERSAO = 'ilhas-de-tinta-v8';
+var VERSAO = 'ilhas-de-tinta-v9';
 
 var ARQUIVOS = [
   './',
@@ -26,6 +26,8 @@ var ARQUIVOS = [
   'js/ai.js',
   'js/setup.js',
   'js/vendor/supabase-2.119.0.umd.js',
+  'js/vendor/qrcode-generator-1.4.4.js',
+  'js/turma.js',
   'js/online.js',
   'js/instalar.js',
   'js/tutorial.js',

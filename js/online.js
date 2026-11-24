@@ -12,10 +12,17 @@
  * menu com um aviso. Se um cliente sai no meio da partida, o explorador dele
  * passa a ser jogado pela CPU (nível em config.js) até a partida acabar.
  *
+ * TURMA FIXA (?turma=gatinhas-k7m2x, veja turma.js): o canal é sempre o mesmo
+ * ("ilhas-de-tinta-TURMA-<id>"). Quem entra procura a anfitriã; se não há
+ * ninguém na sala, quem está procurando há mais tempo vira a anfitriã (todos
+ * calculam a mesma pessoa pelo Presence: campo "chegou"). Daí em diante é uma
+ * sala comum (troca de anfitrião, reconexão, revanche, espectador).
+ *
  * Mensagens (eventos de broadcast no canal "ilhas-de-tinta-<CÓDIGO>"):
  *   sala      anfitrião → todos   quem está na sala, cores, CPUs, estado
  *   pedirSala cliente → anfitrião  "acabei de entrar, me mande a sala"
  *   pedirCor  cliente → anfitrião  troca de cor
+ *   pedirNome cliente → anfitrião  troca de nome (na sala de espera)
  *   cheia     anfitrião → cliente  sala com 4 jogadores
  *   inicio    anfitrião → todos   configuração da partida que começou
  *   estado    anfitrião → todos   posições, relógio e células que mudaram
@@ -87,9 +94,12 @@
 
   function lerNome() {
     var nome = el.nome.value.trim().slice(0, 12);
-    try { if (nome) localStorage.setItem('ilhas-de-tinta:nome', nome); } catch (e) { /* sem armazenamento */ }
+    if (nome) IT.turma.salvarNome(nome);
     return nome || 'Explorador';
   }
+
+  /* Cor preferida guardada no aparelho (a última que a pessoa escolheu). */
+  function corPreferida() { return IT.turma.cor(); }
 
   function avisoOnline(texto) { el.aviso.textContent = texto || ''; }
   function avisoSala(texto) { el.salaAviso.textContent = texto || ''; }
@@ -98,6 +108,9 @@
   function ocupado(sim) {
     el.criar.disabled = sim;
     el.entrar.disabled = sim;
+    el.entrarConvite.disabled = sim;
+    el.confirmarTurma.disabled = sim;
+    el.listaTurmas.querySelectorAll('button').forEach(function (b) { b.disabled = sim; });
   }
 
   /* Devolve uma mensagem amigável se o online não puder funcionar agora. */
@@ -373,7 +386,7 @@
     try {
       sessionStorage.setItem(CHAVE_SESSAO, JSON.stringify({
         codigo: c.codigo, cid: c.cid, nome: c.nome, anfitriao: c.anfitriao,
-        sala: c.anfitriao ? c.sala : null, quando: Date.now()
+        sala: c.anfitriao ? c.sala : null, turma: c.turma || null, quando: Date.now()
       }));
     } catch (e) { /* sem armazenamento: só não volta sozinho ao recarregar */ }
   }
@@ -452,6 +465,16 @@
     }
 
     var sala = c.sala, mudou = false;
+    // Turma: duas pessoas viraram anfitriãs ao mesmo tempo (raro)? Fica quem chegou
+    // primeiro; a outra (sozinha na sala) entra como convidada.
+    if (sala.turma && sala.estado === 'espera' && sala.membros.length === 1 && c.chegou) {
+      var outraAnfitria = Object.keys(presentes).some(function (k) {
+        if (k === c.cid || presentes[k].papel !== 'anfitriao') return false;
+        var ch = +presentes[k].chegou || 0;
+        return ch < c.chegou || (ch === c.chegou && k < c.cid);
+      });
+      if (outraAnfitria) { cederTurma(c); return; }
+    }
     // Quem sumiu: fica "saiu um pouquinho" (a remoção de vez é no vigiarConexao).
     sala.membros.forEach(function (m) {
       if (m.cid === c.cid) return;
@@ -553,8 +576,13 @@
     var c = con;
     if (!c || !c.sala) return;
     var sala = c.sala;
-    el.salaCodigo.textContent = sala.codigo;
+    var turma = sala.turma;
+    el.salaRotulo.textContent = turma ? 'Turma' : 'Código da sala';
+    el.salaCodigo.textContent = turma ? turma.nome + ' 👭' : sala.codigo;
+    el.salaCodigo.classList.toggle('sala-codigo-turma', !!turma);
+    el.salaConvidar.textContent = turma ? '🔗 Mandar link da turma' : '🔗 Convidar amigos';
     var eu = sala.membros.filter(function (m) { return m.cid === c.cid; })[0];
+    el.salaMeuNome.textContent = eu ? eu.nome : c.nome;
 
     // Lista de quem chegou (+ CPUs que vão completar as vagas).
     el.salaJogadores.innerHTML = '';
@@ -621,7 +649,8 @@
       el.salaLinhaNivel.hidden = sala.cpus === 0;
       var total = sala.membros.length + sala.cpus;
       el.salaDica.textContent = total < 2
-        ? 'Diga este código para seus amigos entrarem, ou coloque uma CPU para jogar com você!'
+        ? (turma ? 'Mande o link da turma (ou mostre o QR) para suas amigas entrarem, ou coloque uma CPU para jogar com você!'
+          : 'Diga este código para seus amigos entrarem, ou coloque uma CPU para jogar com você!')
         : 'Tudo pronto! Aperte Jogar quando todo mundo tiver chegado.';
     } else {
       el.salaDica.textContent = sala.estado === 'jogando' && !IT.jogo.rede
@@ -633,6 +662,7 @@
   function escolherCor(cor) {
     var c = con;
     if (!c || !c.sala) return;
+    IT.turma.salvarCor(cor); // da próxima vez, começa com esta cor (se estiver livre)
     if (c.anfitriao) {
       var eu = c.sala.membros.filter(function (m) { return m.cid === c.cid; })[0];
       if (eu && coresUsadas(c.sala, c.cid).indexOf(cor) === -1) {
@@ -660,12 +690,8 @@
       var codigo = gerarCodigo();
       return conectar(codigo, true, nome).then(function (c) {
         con = c;
-        c.sala = {
-          codigo: codigo, anfitriao: c.cid,
-          membros: [{ cid: c.cid, nome: nome, cor: 'rosa' }],
-          cpus: 0, nivel: 'medio', estado: 'espera', rodada: 0
-        };
-        return rastrear(c, { nome: nome, cor: 'rosa', papel: 'anfitriao' })
+        c.sala = salaNova(c, codigo, null);
+        return rastrear(c, { nome: nome, cor: c.sala.membros[0].cor, papel: 'anfitriao' })
           .then(function () { return esperar(800); })
           .then(function () {
             // Código já usado por outra sala? (muito raro) Tenta outro.
@@ -679,21 +705,119 @@
       });
     }
 
-    tentar().then(function (c) {
-      ocupado(false);
-      avisoOnline('');
-      avisoSala('');
-      salvarSessao(c);
-      IT.jogo.irPara('sala');
-      presencaMudou(c);
-      desenharSala();
-      // De tempos em tempos reenvia a sala (para quem chegou e perdeu alguma mensagem).
-      c.timers.push(setInterval(function () { if (c.sala.estado !== 'jogando') enviar(c, 'sala', c.sala); }, 3000));
-    }).catch(function (erro) {
+    tentar().then(comecarComoAnfitriao).catch(function (erro) {
       console.warn('Não foi possível criar a sala:', erro);
       ocupado(false);
       avisoOnline('Não consegui criar a sala agora. 😕 Confira a internet e tente de novo, ou jogue Offline.');
     });
+  }
+
+  /* Sala nova com só eu (anfitriã). */
+  function salaNova(c, codigo, turma) {
+    var sala = {
+      codigo: codigo, anfitriao: c.cid,
+      membros: [{ cid: c.cid, nome: c.nome, cor: corPreferida() || 'rosa' }],
+      cpus: 0, nivel: 'medio', estado: 'espera', rodada: 0
+    };
+    if (turma) sala.turma = { id: turma.id, nome: turma.nome };
+    return sala;
+  }
+
+  /* Acabei de virar a anfitriã de uma sala nova: vai para a sala de espera. */
+  function comecarComoAnfitriao(c) {
+    ocupado(false);
+    avisoOnline('');
+    avisoSala('');
+    salvarSessao(c);
+    IT.jogo.irPara('sala');
+    presencaMudou(c);
+    desenharSala();
+    // De tempos em tempos reenvia a sala (para quem chegou e perdeu alguma mensagem).
+    c.timers.push(setInterval(function () { if (c.sala.estado !== 'jogando') enviar(c, 'sala', c.sala); }, 3000));
+  }
+
+  /* ---------- Turma: link fixo (?turma=…), sempre a mesma sala ---------- */
+
+  function codigoDaTurma(id) { return 'TURMA-' + id; }
+
+  function entrarNaTurma(id, nomeTurma) {
+    var motivo = motivoIndisponivel();
+    if (motivo) { avisoOnline(motivo); return; }
+    if (con) {
+      if (con.turma && con.turma.id === id && con.sala) { IT.jogo.irPara('sala'); return; }
+      sair('');
+      IT.jogo.irPara('online');
+    }
+    var turma = { id: id, nome: nomeTurma || IT.turma.nomeDe(id) };
+    IT.turma.lembrar(id, turma.nome);
+    convitePendente = null;
+    desenharOnline();
+    var nome = lerNome();
+    ocupado(true);
+    avisoOnline('Entrando na turma ' + turma.nome + '… 👭');
+    var chegou = Date.now();
+    conectar(codigoDaTurma(id), false, nome).then(function (c) {
+      con = c;
+      c.turma = turma;
+      c.chegou = chegou;
+      return rastrear(c, { nome: nome, cor: corPreferida(), papel: 'jogador', procurando: true, chegou: chegou }).then(function () {
+        enviar(c, 'pedirSala', { cid: c.cid });
+        procurarAnfitria(c, Date.now(), 0);
+      });
+    }).catch(function (erro) {
+      console.warn('Não foi possível entrar na turma:', erro);
+      ocupado(false);
+      avisoOnline('Não consegui entrar agora. 😕 Confira a internet e tente de novo, ou jogue Offline.');
+    });
+  }
+
+  /*
+   * Esperando a anfitriã da turma responder. Se não tem ninguém na sala, quem
+   * está procurando há mais tempo vira a anfitriã (todos calculam a mesma pessoa).
+   * Se há gente na sala mas sem anfitriã (ela acabou de sair), espera a turma
+   * escolher outra.
+   */
+  function procurarAnfitria(c, inicio, voltas) {
+    if (con !== c || c.fechada || c.sala) return;
+    var agora = Date.now(), presentes = presencas(c);
+    var outros = Object.keys(presentes).filter(function (k) { return k !== c.cid; });
+    var temAnfitria = outros.some(function (k) { return presentes[k].papel === 'anfitriao'; });
+    var temGenteNaSala = outros.some(function (k) { return presentes[k].papel !== 'anfitriao' && !presentes[k].procurando; });
+    if (!temAnfitria && !temGenteNaSala && agora - inicio >= 1200) {
+      var fila = outros.filter(function (k) { return presentes[k].procurando; })
+        .map(function (k) { return { cid: k, chegou: +presentes[k].chegou || 0 }; });
+      fila.push({ cid: c.cid, chegou: c.chegou });
+      fila.sort(function (a, b) { return a.chegou - b.chegou || (a.cid < b.cid ? -1 : a.cid > b.cid ? 1 : 0); });
+      if (fila[0].cid === c.cid) { virarAnfitriaDaTurma(c); return; }
+    }
+    var limite = (temGenteNaSala && !temAnfitria ? O.TOLERANCIA_SALA + O.TEMPO_TURMA : O.TEMPO_TURMA) * 1000;
+    if (agora - inicio > limite) {
+      con = null;
+      fechar(c);
+      ocupado(false);
+      avisoOnline('Não consegui entrar na turma agora. 😕 Tente de novo daqui a pouco.');
+      return;
+    }
+    if (temGenteNaSala && !temAnfitria && voltas === 10) avisoOnline('A turma está escolhendo quem é a anfitriã… ⏳');
+    if (voltas % 5 === 4) enviar(c, 'pedirSala', { cid: c.cid });
+    c.timers.push(setTimeout(function () { procurarAnfitria(c, inicio, voltas + 1); }, 300));
+  }
+
+  function virarAnfitriaDaTurma(c) {
+    c.anfitriao = true;
+    c.sala = salaNova(c, c.codigo, c.turma);
+    rastrear(c, { nome: c.nome, cor: c.sala.membros[0].cor, papel: 'anfitriao', chegou: c.chegou });
+    comecarComoAnfitriao(c);
+  }
+
+  /* Outra pessoa virou anfitriã da turma antes de mim: entro como convidada. */
+  function cederTurma(c) {
+    var turma = c.turma;
+    con = null;
+    fechar(c);
+    limparSessao();
+    IT.jogo.irPara('online');
+    entrarNaTurma(turma.id, turma.nome);
   }
 
   function entrarNaSala() {
@@ -708,7 +832,7 @@
 
     conectar(codigo, false, nome).then(function (c) {
       con = c;
-      return rastrear(c, { nome: nome, cor: null, papel: 'jogador' }).then(function () {
+      return rastrear(c, { nome: nome, cor: corPreferida(), papel: 'jogador' }).then(function () {
         enviar(c, 'pedirSala', { cid: c.cid });
         // Se o anfitrião não responder logo, a sala não existe.
         c.timers.push(setTimeout(function () {
@@ -1306,6 +1430,11 @@
           desenharSala();
         }
         enviar(c, 'sala', c.sala);
+      } else if (evento === 'pedirNome') {
+        var mn = c.sala.membros.filter(function (x) { return x.cid === p.cid; })[0];
+        var novo = String(p.nome || '').trim().slice(0, 12);
+        if (mn && novo) { mn.nome = novo; desenharSala(); }
+        enviar(c, 'sala', c.sala);
       } else if (evento === 'dir') {
         if (jogo.rede !== c || jogo.estado !== 'jogando') return;
         jogo.jogadores.forEach(function (j) {
@@ -1348,6 +1477,12 @@
       c.ultimaSalaEm = Date.now(); // "sinal de vida" do anfitrião fora da partida
       var primeira = !c.sala;
       c.sala = p;
+      if (p.turma) {
+        // Turma: guarda no aparelho (com o nome que a anfitriã usa) e deixa de "procurar".
+        c.turma = p.turma;
+        if (primeira) IT.turma.lembrar(p.turma.id, p.turma.nome);
+        if (c.presenca && c.presenca.procurando) rastrear(c, { nome: c.nome, cor: c.presenca.cor, papel: 'jogador' });
+      }
       c.vistoAnfitriao = c.vistoAnfitriao || !!c.canal.presenceState()[p.anfitriao];
       if (primeira) {
         ocupado(false);
@@ -1430,23 +1565,125 @@
     return location.origin + location.pathname.replace(/index\.html$/, '') + '?sala=' + codigo.split('-')[1];
   }
 
+  /* Link desta sala: o fixo da turma, ou o ?sala= da sala avulsa. */
+  function linkDoConvite(sala) {
+    return sala.turma ? IT.turma.link(sala.turma.id) : linkDaSala(sala.codigo);
+  }
+
   /* Compartilha o link (celular) ou copia (computador). */
   function convidar() {
     var c = con;
     if (!c || !c.sala) return;
-    var link = linkDaSala(c.sala.codigo);
-    var texto = 'Vem pintar a ilha comigo! 🎨 Sala ' + c.sala.codigo;
+    var turma = c.sala.turma;
+    var link = linkDoConvite(c.sala);
+    var texto = turma
+      ? 'Vem pintar a ilha com a turma ' + turma.nome + '! 🎨 É só tocar no link para entrar (vale sempre):'
+      : 'Vem pintar a ilha comigo! 🎨 Sala ' + c.sala.codigo;
     if (navigator.share) {
       navigator.share({ title: 'Ilhas de Tinta', text: texto, url: link }).catch(function () { /* cancelou */ });
       return;
     }
     var copiar = navigator.clipboard && navigator.clipboard.writeText
-      ? navigator.clipboard.writeText(link) : Promise.reject();
+      ? navigator.clipboard.writeText(turma ? texto + ' ' + link : link) : Promise.reject();
     copiar.then(function () {
-      avisoSala('Link copiado! Mande para seus amigos 😊');
+      avisoSala(turma ? 'Link da turma copiado! Cole no WhatsApp das amigas 😊' : 'Link copiado! Mande para seus amigos 😊');
     }, function () {
-      avisoSala('Mande este link para seus amigos: ' + link);
+      avisoSala('Mande este link para ' + (turma ? 'suas amigas' : 'seus amigos') + ': ' + link);
     });
+  }
+
+  /* QR grande do link, para as amigas lerem com a câmera. */
+  function mostrarQR() {
+    var c = con;
+    if (!c || !c.sala) return;
+    var link = linkDoConvite(c.sala);
+    el.telaQr.hidden = false;
+    el.qrTitulo.textContent = c.sala.turma ? 'Turma ' + c.sala.turma.nome + ': aponte a câmera 📱' : 'Aponte a câmera 📱';
+    var lado = Math.max(180, Math.min(320, window.innerWidth - 90, window.innerHeight - 260));
+    IT.turma.desenharQR(el.qrCanvas, link, lado);
+    el.qrLink.textContent = link;
+    el.qrFechar.focus();
+  }
+
+  /* ---------- Trocar o nome (na sala de espera) ---------- */
+
+  function abrirTrocarNome() {
+    if (!con) return;
+    el.salaFormNome.hidden = false;
+    el.salaTrocarNome.hidden = true;
+    el.salaNovoNome.value = con.nome;
+    el.salaNovoNome.focus();
+    el.salaNovoNome.select();
+  }
+
+  function salvarNovoNome() {
+    var c = con;
+    el.salaFormNome.hidden = true;
+    el.salaTrocarNome.hidden = false;
+    var novo = el.salaNovoNome.value.trim().slice(0, 12);
+    if (!c || !c.sala || !novo || novo === c.nome) return;
+    IT.turma.salvarNome(novo);
+    el.nome.value = novo;
+    c.nome = novo;
+    rastrear(c, { nome: novo, cor: c.presenca ? c.presenca.cor : null, papel: c.anfitriao ? 'anfitriao' : 'jogador', chegou: c.presenca ? c.presenca.chegou : undefined });
+    var eu = c.sala.membros.filter(function (m) { return m.cid === c.cid; })[0];
+    if (c.anfitriao) {
+      if (eu) eu.nome = novo;
+      enviar(c, 'sala', c.sala);
+    } else {
+      if (eu) eu.nome = novo; // aparece já; o anfitrião confirma
+      enviar(c, 'pedirNome', { cid: c.cid, nome: novo });
+    }
+    salvarSessao(c);
+    desenharSala();
+  }
+
+  /* ---------- Tela "Jogar Online": turmas salvas, convite, criar turma ---------- */
+
+  var convitePendente = null;   // turma aberta por link, esperando o nome
+  var codigoAberto = false;     // "Tenho um código" tocado (quando CODIGO_NO_MENU = false)
+
+  function desenharOnline() {
+    var turmas = IT.turma.lista();
+    el.listaTurmas.innerHTML = '';
+    turmas.forEach(function (t) {
+      var li = document.createElement('li');
+      var b = document.createElement('button');
+      b.className = 'botao botao-turma';
+      b.textContent = '👭 Jogar com a turma ' + t.nome;
+      b.addEventListener('click', function () { entrarNaTurma(t.id, t.nome); });
+      var x = document.createElement('button');
+      x.className = 'botao-remover';
+      x.textContent = '✕';
+      x.title = 'Tirar a turma ' + t.nome + ' da lista';
+      x.setAttribute('aria-label', x.title);
+      x.addEventListener('click', function () {
+        if (window.confirm('Tirar a turma ' + t.nome + ' da lista deste aparelho? (O link da turma continua valendo.)')) {
+          IT.turma.esquecer(t.id);
+          desenharOnline();
+        }
+      });
+      li.appendChild(b);
+      li.appendChild(x);
+      el.listaTurmas.appendChild(li);
+    });
+    el.turmas.hidden = !turmas.length || !!convitePendente;
+    el.convite.hidden = !convitePendente;
+    el.entrarConvite.hidden = !convitePendente;
+    el.criarBloco.hidden = !!convitePendente;
+    var codigoVisivel = O.CODIGO_NO_MENU || codigoAberto;
+    el.codigoBloco.hidden = !!convitePendente || !codigoVisivel;
+    el.tenhoCodigo.hidden = !!convitePendente || codigoVisivel;
+    if (convitePendente) {
+      el.convite.textContent = 'Você foi chamado para a turma ' + convitePendente.nome + '! 👭 Escreva seu nome e toque em Entrar.';
+      el.entrarConvite.textContent = '🚪 Entrar na turma ' + convitePendente.nome;
+    }
+  }
+
+  function criarTurma() {
+    var nomeTurma = el.turmaNome.value.trim().slice(0, 16);
+    if (!nomeTurma) { avisoOnline('Escolha um nome para a turma, por exemplo "Gatinhas" 🐱'); el.turmaNome.focus(); return; }
+    entrarNaTurma(IT.turma.criarId(nomeTurma), nomeTurma);
   }
 
   /* ---------- API usada pelo game.js e pela interface ---------- */
@@ -1468,8 +1705,48 @@
       el.salaNivel = $('sala-nivel');
       el.salaLinhaNivel = $('sala-linha-nivel');
       el.salaAviso = $('sala-aviso');
+      el.salaRotulo = $('sala-rotulo');
+      el.salaConvidar = $('sala-convidar');
+      el.salaMeuNome = $('sala-meu-nome');
+      el.salaTrocarNome = $('sala-trocar-nome');
+      el.salaFormNome = $('sala-form-nome');
+      el.salaNovoNome = $('sala-novo-nome');
+      el.convite = $('online-convite');
+      el.turmas = $('online-turmas');
+      el.listaTurmas = $('online-lista-turmas');
+      el.entrarConvite = $('online-entrar-convite');
+      el.criarBloco = $('online-criar-bloco');
+      el.novaTurma = $('online-nova-turma');
+      el.turmaNome = $('online-turma-nome');
+      el.confirmarTurma = $('online-turma-confirmar');
+      el.codigoBloco = $('online-codigo-bloco');
+      el.tenhoCodigo = $('online-tenho-codigo');
+      el.telaQr = $('tela-qr');
+      el.qrCanvas = $('qr-canvas');
+      el.qrTitulo = $('qr-titulo');
+      el.qrLink = $('qr-link');
+      el.qrFechar = $('qr-fechar');
 
-      try { el.nome.value = localStorage.getItem('ilhas-de-tinta:nome') || ''; } catch (e) { /* sem armazenamento */ }
+      el.nome.value = IT.turma.nome(); // nome lembrado neste aparelho
+
+      $('online-criar-turma').addEventListener('click', function () {
+        el.novaTurma.hidden = !el.novaTurma.hidden;
+        if (!el.novaTurma.hidden) el.turmaNome.focus();
+      });
+      el.confirmarTurma.addEventListener('click', criarTurma);
+      el.turmaNome.addEventListener('keydown', function (e) { if (e.key === 'Enter') criarTurma(); });
+      el.entrarConvite.addEventListener('click', function () {
+        if (convitePendente) entrarNaTurma(convitePendente.id, convitePendente.nome);
+      });
+      el.nome.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && convitePendente) entrarNaTurma(convitePendente.id, convitePendente.nome);
+      });
+      el.tenhoCodigo.addEventListener('click', function () { codigoAberto = true; desenharOnline(); el.codigo.focus(); });
+      $('sala-qr').addEventListener('click', mostrarQR);
+      el.qrFechar.addEventListener('click', function () { el.telaQr.hidden = true; });
+      el.salaTrocarNome.addEventListener('click', abrirTrocarNome);
+      $('sala-salvar-nome').addEventListener('click', salvarNovoNome);
+      el.salaNovoNome.addEventListener('keydown', function (e) { if (e.key === 'Enter') salvarNovoNome(); });
 
       el.criar.addEventListener('click', criarSala);
       el.entrar.addEventListener('click', entrarNaSala);
@@ -1509,8 +1786,15 @@
       if (motivo) { avisoMenu(motivo); return; }
       avisoMenu('');
       avisoOnline('');
+      el.aviso.classList.remove('aviso-convite');
+      convitePendente = null;
+      el.novaTurma.hidden = true;
       ocupado(false);
       IT.jogo.irPara('online');
+      desenharOnline();
+      // Foco: a primeira turma salva (um toque e entra) ou "Criar sala".
+      var primeira = el.listaTurmas.querySelector('.botao-turma');
+      if (primeira) primeira.focus(); else if (el.nome.value) el.criar.focus();
     },
 
     /* Abriu o jogo por um link de convite (?sala=4821): já deixa o código pronto. */
@@ -1520,9 +1804,37 @@
       IT.online.abrir();
       if (IT.jogo.estado !== 'online') return; // sem internet/arquivo: o menu já mostrou o aviso
       el.codigo.value = codigo.split('-')[1];
+      codigoAberto = true;
+      desenharOnline();
+      // Nome lembrado neste aparelho: entra direto, sem pedir nada.
+      if (IT.turma.nome()) { entrarNaSala(); return; }
       avisoOnline('Você foi convidado para a sala ' + codigo + '! 🎉 Escreva seu nome e toque em Entrar.');
       el.aviso.classList.add('aviso-convite');
+      el.nome.focus();
     },
+
+    /*
+     * Abriu o link da turma (?turma=gatinhas-k7m2x). Com o nome lembrado, entra
+     * direto; sem nome, pede só o nome (um campo e um botão).
+     */
+    abrirTurma: function (id) {
+      id = String(id || '').toLowerCase();
+      if (!IT.turma.valido(id)) { IT.online.abrir(); avisoOnline('Esse link de turma não está completo. 🤔 Peça o link de novo para quem criou.'); return; }
+      // Recarregou a página no meio da turma: retomarSessao cuida (mesma identidade).
+      var sessao = lerSessao();
+      if (sessao && sessao.codigo === codigoDaTurma(id)) return;
+      if (sessao) limparSessao();
+      IT.online.abrir();
+      if (IT.jogo.estado !== 'online') return; // sem internet/arquivo: o menu já mostrou o aviso
+      var nomeTurma = IT.turma.nomeDe(id);
+      if (IT.turma.nome()) { entrarNaTurma(id, nomeTurma); return; }
+      convitePendente = { id: id, nome: nomeTurma };
+      desenharOnline();
+      el.nome.focus();
+    },
+
+    entrarNaTurma: entrarNaTurma,
+    linkDoConvite: function () { return con && con.sala ? linkDoConvite(con.sala) : null; },
 
     linkDaSala: linkDaSala,
 
@@ -1539,6 +1851,7 @@
       ocupado(true);
       conectar(sessao.codigo, false, sessao.nome, sessao.cid).then(function (c) {
         con = c;
+        c.turma = sessao.turma || null;
         c.voltando = true;
         // semEstado: eu era o anfitrião e perdi o jogo ao recarregar → outro assume.
         return rastrear(c, { nome: sessao.nome, cor: null, papel: 'jogador', semEstado: !!sessao.anfitriao }).then(function () {
@@ -1561,6 +1874,12 @@
               desenharSala();
               avisoSala('Você voltou para a sua sala! 🎉');
               salvarSessao(c);
+            } else if (sessao.turma) {
+              // Turma: ninguém respondeu → entra de novo (e vira a anfitriã se estiver vazia).
+              sair('');
+              IT.jogo.irPara('online');
+              ocupado(false);
+              entrarNaTurma(sessao.turma.id, sessao.turma.nome);
             } else {
               sair('');
               IT.jogo.irPara('online');
