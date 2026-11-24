@@ -1,0 +1,87 @@
+{
+ "cenario": "3j",
+ "sementes": "9000000..9000099",
+ "segundos": 25,
+ "resultados": [
+  {
+   "robo": "campeão (genético)",
+   "partidas": 100,
+   "vitorias": 75,
+   "empates": 0,
+   "taxa": 0.75,
+   "ic95": [
+    0.657,
+    0.825
+   ],
+   "territorioMedio": 0.334,
+   "territorioMedioDoMelhorAdversario": 0.257,
+   "rastroCortadoPorPartida": 3.45,
+   "cortesFeitosPorPartida": 3.9,
+   "terminouAntesDoTempo": 98
+  },
+  {
+   "robo": "robô esperto",
+   "partidas": 100,
+   "vitorias": 0,
+   "empates": 0,
+   "taxa": 0,
+   "ic95": [
+    0,
+    0.037
+   ],
+   "territorioMedio": 0.199,
+   "territorioMedioDoMelhorAdversario": 0.361,
+   "rastroCortadoPorPartida": 1.56,
+   "cortesFeitosPorPartida": 1.37,
+   "terminouAntesDoTempo": 98
+  },
+  {
+   "robo": "robô cuidadoso",
+   "partidas": 100,
+   "vitorias": 2,
+   "empates": 0,
+   "taxa": 0.02,
+   "ic95": [
+    0.006,
+    0.07
+   ],
+   "territorioMedio": 0.208,
+   "territorioMedioDoMelhorAdversario": 0.355,
+   "rastroCortadoPorPartida": 3.87,
+   "cortesFeitosPorPartida": 1.91,
+   "terminouAntesDoTempo": 92
+  },
+  {
+   "robo": "robô sem treino (genes 0,5)",
+   "partidas": 100,
+   "vitorias": 4,
+   "empates": 0,
+   "taxa": 0.04,
+   "ic95": [
+    0.016,
+    0.098
+   ],
+   "territorioMedio": 0.168,
+   "territorioMedioDoMelhorAdversario": 0.31,
+   "rastroCortadoPorPartida": 5.89,
+   "cortesFeitosPorPartida": 12.1,
+   "terminouAntesDoTempo": 42
+  },
+  {
+   "robo": "CPU Difícil no lugar do J1",
+   "partidas": 100,
+   "vitorias": 63,
+   "empates": 0,
+   "taxa": 0.63,
+   "ic95": [
+    0.532,
+    0.718
+   ],
+   "territorioMedio": 0.313,
+   "territorioMedioDoMelhorAdversario": 0.27,
+   "rastroCortadoPorPartida": 4.38,
+   "cortesFeitosPorPartida": 1.33,
+   "terminouAntesDoTempo": 86
+  }
+ ]
+}

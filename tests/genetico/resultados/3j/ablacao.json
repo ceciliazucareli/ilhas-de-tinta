@@ -1,0 +1,198 @@
+{
+ "cenario": "3j",
+ "parametrosDoCampeao": {
+  "profundidadeMax": 8,
+  "larguraMax": 10,
+  "candidatos": 10,
+  "rastroMax": 35,
+  "medo": 2,
+  "margemSeguranca": 1.6848,
+  "alcanceCaca": 6,
+  "respiro": 1.905,
+  "vigia": -1,
+  "pesoRoubo": 2.2204,
+  "pesoBorda": 0.3872,
+  "cautela": 0.5837,
+  "esperaEmCasa": 0,
+  "raioPerigo": 4.6610000000000005
+ },
+ "sementes": "8000000..",
+ "linhas": [
+  {
+   "variante": "campeão como está",
+   "mudanca": {},
+   "vitorias": 51,
+   "partidas": 60,
+   "ic95": [
+    0.739,
+    0.919
+   ],
+   "territorio": 0.354,
+   "adversario": 0.246,
+   "cortado": 3.12,
+   "cortes": 4.67
+  },
+  {
+   "variante": "não caça (alcanceCaca 0)",
+   "mudanca": {
+    "alcanceCaca": 0
+   },
+   "vitorias": 48,
+   "partidas": 60,
+   "ic95": [
+    0.682,
+    0.882
+   ],
+   "territorio": 0.342,
+   "adversario": 0.254,
+   "cortado": 3.28,
+   "cortes": 1.7
+  },
+  {
+   "variante": "sem margem de segurança (margem 0)",
+   "mudanca": {
+    "margemSeguranca": 0
+   },
+   "vitorias": 39,
+   "partidas": 60,
+   "ic95": [
+    0.524,
+    0.758
+   ],
+   "territorio": 0.325,
+   "adversario": 0.275,
+   "cortado": 5.62,
+   "cortes": 5.03
+  },
+  {
+   "variante": "margem de segurança do Impossível (1)",
+   "mudanca": {
+    "margemSeguranca": 1
+   },
+   "vitorias": 47,
+   "partidas": 60,
+   "ic95": [
+    0.664,
+    0.869
+   ],
+   "territorio": 0.343,
+   "adversario": 0.257,
+   "cortado": 3.35,
+   "cortes": 4.6
+  },
+  {
+   "variante": "nunca foge pelo perigo (margem -2)",
+   "mudanca": {
+    "margemSeguranca": -2
+   },
+   "vitorias": 46,
+   "partidas": 60,
+   "ic95": [
+    0.646,
+    0.856
+   ],
+   "territorio": 0.336,
+   "adversario": 0.249,
+   "cortado": 6.3,
+   "cortes": 4.52
+  },
+  {
+   "variante": "voltas pequenas (prof. 3, lado 4, rastro 10)",
+   "mudanca": {
+    "profundidadeMax": 3,
+    "larguraMax": 4,
+    "rastroMax": 10
+   },
+   "vitorias": 4,
+   "partidas": 60,
+   "ic95": [
+    0.026,
+    0.159
+   ],
+   "territorio": 0.222,
+   "adversario": 0.344,
+   "cortado": 3.2,
+   "cortes": 4.6
+  },
+  {
+   "variante": "rastro curto (rastroMax 12)",
+   "mudanca": {
+    "rastroMax": 12
+   },
+   "vitorias": 42,
+   "partidas": 60,
+   "ic95": [
+    0.575,
+    0.801
+   ],
+   "territorio": 0.334,
+   "adversario": 0.277,
+   "cortado": 4.35,
+   "cortes": 5.78
+  },
+  {
+   "variante": "escolhe a 1ª volta (candidatos 1)",
+   "mudanca": {
+    "candidatos": 1
+   },
+   "vitorias": 27,
+   "partidas": 60,
+   "ic95": [
+    0.331,
+    0.575
+   ],
+   "territorio": 0.305,
+   "adversario": 0.31,
+   "cortado": 3.75,
+   "cortes": 4.78
+  },
+  {
+   "variante": "roubar = grama (pesoRoubo 1)",
+   "mudanca": {
+    "pesoRoubo": 1
+   },
+   "vitorias": 46,
+   "partidas": 60,
+   "ic95": [
+    0.646,
+    0.856
+   ],
+   "territorio": 0.344,
+   "adversario": 0.26,
+   "cortado": 1.82,
+   "cortes": 4.13
+  },
+  {
+   "variante": "medo do robô esperto (6)",
+   "mudanca": {
+    "medo": 6
+   },
+   "vitorias": 43,
+   "partidas": 60,
+   "ic95": [
+    0.592,
+    0.815
+   ],
+   "territorio": 0.343,
+   "adversario": 0.266,
+   "cortado": 2.35,
+   "cortes": 4.35
+  },
+  {
+   "variante": "vigia o adversário (vigia 6)",
+   "mudanca": {
+    "vigia": 6
+   },
+   "vitorias": 3,
+   "partidas": 60,
+   "ic95": [
+    0.017,
+    0.137
+   ],
+   "territorio": 0.171,
+   "adversario": 0.305,
+   "cortado": 11.2,
+   "cortes": 14.77
+  }
+ ]
+}
