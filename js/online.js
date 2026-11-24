@@ -1596,7 +1596,7 @@
     });
   }
 
-  /* QR grande do link, para as amigas lerem com a câmera. */
+  /* QR grande do link, para os amigos lerem com a câmera. */
   function mostrarQR() {
     var c = con;
     if (!c || !c.sala) return;
