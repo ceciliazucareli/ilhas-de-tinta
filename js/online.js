@@ -639,7 +639,7 @@
       el.salaLinhaNivel.hidden = sala.cpus === 0;
       var total = sala.membros.length + sala.cpus;
       el.salaDica.textContent = total < 2
-        ? (turma ? 'Mande o link da turma (ou mostre o QR) para suas amigas entrarem, ou coloque uma CPU para jogar com você!'
+        ? (turma ? 'Mande o link da turma (ou mostre o QR) para seus amigos entrarem, ou coloque uma CPU para jogar com você!'
           : 'Diga este código para seus amigos entrarem, ou coloque uma CPU para jogar com você!')
         : 'Tudo pronto! Aperte Jogar quando todo mundo tiver chegado.';
     } else {
@@ -789,7 +789,7 @@
       avisoOnline('Não consegui entrar na turma agora. 😕 Tente de novo daqui a pouco.');
       return;
     }
-    if (temGenteNaSala && !temAnfitria && voltas === 10) avisoOnline('A turma está escolhendo quem é a anfitriã… ⏳');
+    if (temGenteNaSala && !temAnfitria && voltas === 10) avisoOnline('A turma está escolhendo quem vai ser o anfitrião… ⏳');
     if (voltas % 5 === 4) enviar(c, 'pedirSala', { cid: c.cid });
     c.timers.push(setTimeout(function () { procurarAnfitria(c, inicio, voltas + 1); }, 300));
   }
@@ -1590,9 +1590,9 @@
     var copiar = navigator.clipboard && navigator.clipboard.writeText
       ? navigator.clipboard.writeText(turma ? texto + ' ' + link : link) : Promise.reject();
     copiar.then(function () {
-      avisoSala(turma ? 'Link da turma copiado! Cole no WhatsApp das amigas 😊' : 'Link copiado! Mande para seus amigos 😊');
+      avisoSala(turma ? 'Link da turma copiado! Cole no WhatsApp dos amigos 😊' : 'Link copiado! Mande para seus amigos 😊');
     }, function () {
-      avisoSala('Mande este link para ' + (turma ? 'suas amigas' : 'seus amigos') + ': ' + link);
+      avisoSala('Mande este link para ' + 'seus amigos' + ': ' + link);
     });
   }
 
@@ -1686,7 +1686,7 @@
 
   function criarTurma() {
     var nomeTurma = el.turmaNome.value.trim().slice(0, 16);
-    if (!nomeTurma) { avisoOnline('Escolha um nome para a turma, por exemplo "Gatinhas" 🐱'); el.turmaNome.focus(); return; }
+    if (!nomeTurma) { avisoOnline('Escolha um nome para a turma 🙂'); el.turmaNome.focus(); return; }
     entrarNaTurma(IT.turma.criarId(nomeTurma), nomeTurma);
   }
 

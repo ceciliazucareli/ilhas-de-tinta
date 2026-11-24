@@ -95,21 +95,21 @@ aparelho. Liga/desliga em **⏸ → 🔊 Som** (fica salvo).
 
 #### Turma: um link que não muda (sem digitar nada)
 
-Para quem joga sempre com as mesmas amigas:
+Para quem joga sempre com as mesmos amigos:
 
 1. Em **Jogar Online**, toque em **👭 Criar uma turma**, escolha um nome (por
-   exemplo "Gatinhas") e toque em **✨ Criar turma**. Você vira a anfitriã.
+   exemplo "Gatinhas") e toque em **✨ Criar turma**. Você vira o anfitrião.
 2. Na sala, **🔗 Mandar link da turma** abre o compartilhar do celular (ou
    copia no computador) com um texto pronto para o WhatsApp e um link fixo como
    `https://ilhas-de-tinta.vercel.app/?turma=gatinhas-k7m2x`. O final é
    sorteado (5 letras e números, sem os que confundem, como 0/o e 1/l), para
    ninguém de fora adivinhar.
-3. **📱 Mostrar QR** mostra um QR grande desse link para as amigas lerem com a
+3. **📱 Mostrar QR** mostra um QR grande desse link para os amigos lerem com a
    câmera. O QR é desenhado no próprio aparelho
    (`js/vendor/qrcode-generator-1.4.4.js`), sem nenhum serviço de fora; ele
    também existe na sala avulsa, com o link `?sala=`.
 4. **O link vale sempre** e leva sempre à **mesma sala**:
-   - quem chega primeiro vira a anfitriã;
+   - quem chega primeiro vira o anfitrião;
    - quem chega depois entra direto na sala de espera;
    - se a partida já começou, a pessoa assiste e joga a próxima;
    - se todo mundo saiu, quem abrir o link de novo cria a sala outra vez.
@@ -521,7 +521,7 @@ rastro (`Grade.capturar(N)` em `js/grid.js`):
   celular abre o link e entra com um toque (e, com o nome lembrado, entra direto).
 - `tests/celular/teste_turma.py` — **turma fixa** com 4 aparelhos (2
   computadores e 2 celulares, Supabase real):
-  - quem cria vira a anfitriã;
+  - quem cria vira o anfitrião;
   - o QR na tela, lido com o jsQR, dá o link certo;
   - sem nome lembrado, entra só escrevendo o nome;
   - com nome lembrado, entra direto e com a cor preferida (ou outra livre, se
