@@ -393,6 +393,8 @@ tests/captura.html    testes da captura de área (abra no navegador)
 tests/simulacao.html  partidas automáticas com CPUs + teste dos controles
 tests/online.html     teste online de ponta a ponta (2 ou 4 janelas, Supabase real)
 tests/celular/        testes com toque de verdade e celular x desktop (Python + Chrome)
+tests/genetico/       teste oculto: robô treinado por algoritmo genético × Impossível,
+                      e o modo depuração (?robo=campeao&debug=1) — veja RELATORIO.md
 docs/screenshots/     capturas de tela
 ```
 
@@ -447,6 +449,14 @@ rastro (`Grade.capturar(N)` em `js/grid.js`):
   `google-chrome`; veja `tests/celular/LEIAME.md`.
 
 A página fica verde quando tudo passa.
+
+**Teste oculto: o Impossível é vencível? E o que o robô pensa?** Em
+`tests/genetico/` há um robô treinado por algoritmo genético. Para assisti-lo:
+`index.html?robo=campeao`. Com `&debug=1`, aparecem as decisões dele (balão,
+desenhos no mapa, painel com o log e o ranking das voltas, pausa/passo e
+"Baixar log (JSON)"). Só `?debug=1` mostra as decisões da CPU Impossível numa
+partida normal. Nada disso aparece no menu. Números, como rodar e o formato do
+log estão em [`tests/genetico/RELATORIO.md`](tests/genetico/RELATORIO.md).
 
 ### Ajustes rápidos
 

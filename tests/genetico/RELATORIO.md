@@ -153,6 +153,126 @@ Abra o jogo com `?robo=campeao` (vale também no site publicado):
 `game.js`, que só carregam `tests/genetico/assistir.js` quando a URL tem
 `?robo=`. Sem esse parâmetro, o jogo é exatamente o de antes.
 
+## Modo depuração: o que o robô decidiu e por quê
+
+Abra o jogo com `&debug=1` (também vale no site publicado):
+
+- `index.html?robo=campeao&debug=1`: robô campeão (1x1) contra o Impossível;
+- `index.html?robo=campeao&cenario=3j&debug=1` (ou `4j`);
+- `index.html?debug=1`: jogo normal pelo menu, mostrando as decisões da CPU
+  Impossível (ou da primeira CPU; `&quem=3` escolhe o jogador 3).
+
+Sem `debug=1` nada disso é carregado e o jogo é exatamente o de sempre.
+
+**No mapa:**
+- **retângulo tracejado**: a volta planejada;
+- **pontilhado até a 🏠**: o caminho de volta para casa (sem pisar no próprio
+  rastro);
+- **mira vermelha**: o ponto onde vai cortar alguém, quando está caçando;
+- **👁️**: onde fica de vigia;
+- **área avermelhada**: até onde os adversários chegam antes de o robô
+  conseguir voltar para casa (passos até casa + margem). Se o rastro dele
+  estiver dentro dela, ele volta.
+
+Um **balão** em cima do robô mostra a decisão de agora, com os números do
+momento, por exemplo "Voltando: 😈 chega no meu rastro em 6, eu em casa em 3".
+
+**Painel de decisões** (à direita; no celular fica embaixo e começa
+recolhido; toque em "🐞 Decisões" para abrir):
+- uma linha por **mudança** de decisão ou por evento (pintou, cortou, foi
+  cortado), com o tempo da partida, a frase e os números (rastro, passos até
+  casa, passos de cada adversário até o meu rastro e o limite);
+- ao tocar numa linha, ela abre o placar daquela hora, a tabela "adversário ×
+  passos até meu rastro" e, se a linha for a escolha de uma volta, o
+  **ranking das voltas comparadas** com a nota e os componentes de cada uma
+  (grama, roubo de quem, borda, risco). O mapa mostra a **foto** daquele
+  momento com os desenhos da hora; "▶ Ao vivo" volta;
+- controles: ⏸, 0,25×, 0,5×, 1× e **⏭ passo** (avança até a próxima
+  decisão, uma célula). No teclado, `.` faz o mesmo;
+- **⬇ Baixar log (JSON)**: salva o log da partida.
+
+![Fuga por perigo](../../docs/screenshots/debug-balao-perigo.png)
+![Ranking das voltas e foto do momento](../../docs/screenshots/debug-painel-ranking.png)
+
+Mais fotos de tela: `docs/screenshots/debug-volta.png`, `debug-cacada.png`,
+`debug-celular.png` e `debug-celular-recolhido.png`.
+
+**Sem navegador** (mesmo JSON):
+
+```sh
+node tests/genetico/registrar.js --log partida.json --texto          # robô campeão 1x1, semente 9000000
+node tests/genetico/registrar.js --log p.json --cenario 3j --semente 9000005
+node tests/genetico/registrar.js --texto --robo esperto --sujeito 2  # decisões do Impossível
+```
+
+Linhas reais (robô campeão 1x1, semente 9000000):
+
+```
+0:00,0  Escolhi uma volta 7×10 para a direita: 70 de grama (nota 60,9, a melhor de 9)
+0:01,1  Voltando: 😈 chega no meu rastro em 10, eu em casa em 8 + margem 3,5 = 11,5 (10 ≤ 11,5)
+0:02,2  🎨 Fechei a volta: +14 casas (agora 3,6%)
+0:04,8  Caçando 😈: chego no rastro dele em 5, ele em casa em 8
+0:05,5  ✂️ Cortei o rastro de 😈
+0:05,5  Cortei! Descanso 2,5 s antes de caçar de novo
+0:09,3  Escolhi uma volta 10×6 para baixo: 50 de grama + 10 de 😈, com adversário perto (nota 51,1, a melhor de 9)
+0:17,8  Caçando 😈: chego no caminho de volta dele em 2, ele em casa em 2,9
+0:18,0  Parei de caçar: não chego a tempo em ninguém
+```
+
+E do Impossível (`--sujeito 2`): "De olho no caminho de volta de Robô (estou a
+24 passos)".
+
+### Formato do JSON
+
+```js
+{
+  formato: 'ilhas-de-tinta/depuracao', versao: 1,
+  sujeito: { id, nome, tipo, dificuldade },   // de quem é o log
+  parametros: { ... },                         // genes decodificados (robô) ou nível (CPU)
+  mapa: { colunas, linhas },
+  jogadores: [{ id, nome, tipo, dificuldade, cor, velocidade }],
+  decisoes: 638,                               // vezes que o cérebro decidiu (uma por célula)
+  cenario, semente, robo, resultado,           // só no Node (registrar.js); no navegador: url
+  entradas: [
+    { n, t,                                    // nº da linha e segundos de partida
+      tipo: 'decisao',
+      modo: 'casa' | 'sair' | 'voltar' | 'cacar' | 'vigiar',
+      motivo: 'volta' | 'semVolta' | 'espera' | 'rastroMax' | 'medo' | 'fimDaVolta' | 'perigo'
+            | 'corte' | 'vigia' | 'respiro' | 'fimCaca' | 'caca' | 'inalcancavel' | 'reinicio' | 'inicio',
+      frase: 'Voltando: 😈 chega no meu rastro em 10, …',
+      numeros: { rastro, casa,                 // tamanho do rastro; passos até casa
+                 folga, limite,                // margem; (casa + margem) / velocidade
+                 adversarios: [{ id, nome, apelido, passos, tempo }] },  // até o MEU rastro
+      detalhe: { tipo, … },                    // o motivo cru do ai.js. Ex.: perigo → detalhe.adversarios[].alcanca;
+                                               // corte → corte: { x, y, passos, alvo, tempoDele, onde: 'rastro'|'caminho' }
+      direcao: 'cima', posicao: [x, y],
+      placar: [{ nome, pct }],
+      candidatos: [                            // só quando escolheu uma volta (motivo 'volta')
+        { posicao: 1, escolhida: true, nota: 60.85, direcao: 'direita', lado: 'cima',
+          largura: 7, altura: 10, retangulo: { x0, y0, x1, y1 }, area: 70,
+          grama: 70, roubo: [{ de: '😈', casas: 12 }], borda: -9.15,
+          antesDoRisco: 60.85, risco: false, adversarioMaisPerto: 22, raioDeRisco: 11.31, fatorRisco: 1 } ],
+      foto: { donos: '000…', rastros: '000…',  // um dígito (0–4) por célula, linha a linha
+              jogadores: [{ id, x, y }],
+              desenhos: { plano: { x0, y0, x1, y1, pontos }, caminhoCasa: [[x, y], …],
+                          mira: [x, y], vigia: [x, y], perigo: [índice, …] } } },
+    { n, t, tipo: 'evento', evento: 'pintou' | 'cortei' | 'cortado' | 'proprio', frase, placar, foto }
+  ]
+}
+```
+
+`registrar.js --sem-fotos` tira as fotos (o log de uma partida cai de ~700 KB para ~260 KB).
+
+**Garantia de que não muda o jogo:** o registro só lê o estado do jogo. Ele
+não sorteia nem mexe no mapa. Os trechos novos do `ai.js` só guardam o motivo
+e os componentes das notas. `node tests/genetico/teste_depuracao.js` joga 36
+partidas (robô campeão, robô esperto e o Impossível como sujeito, em 1x1, 3j e
+4j) com e sem registro, e o mapa final sai idêntico em todas; o teste também
+exige no log uma fuga por perigo, uma caçada e a escolha de uma volta.
+`python3 tests/genetico/teste_depuracao_tela.py http://localhost:8000/ --fotos`
+confere o modo na tela (sem `debug` nada aparece; pausa; passo = uma decisão;
+ranking; foto; 3j; só `?debug=1`; celular) e refaz as fotos de tela.
+
 ## Como funciona
 
 - **Simulador** (`simulador.js`): carrega os arquivos reais `config.js`,

@@ -191,7 +191,7 @@
           a = maisRapido(n.adversarios);
           if (!a) return 'Voltando: alguém alcançaria meu rastro antes de eu chegar em casa';
           return 'Voltando: ' + a.apelido + ' chega no meu rastro em ' + num(a.passos) + ', eu em casa em ' + num(n.casa) +
-            ' (margem ' + num(n.folga, 1) + ')';
+            (n.folga ? ' + margem ' + num(n.folga, 1) + ' = ' + num(n.casa + n.folga, 1) : '') + ' (' + num(a.passos) + ' ≤ ' + num(n.casa + n.folga, 1) + ')';
         }
         case 'corte': {
           var c = m.corte, alvo = porId(c.alvo);
