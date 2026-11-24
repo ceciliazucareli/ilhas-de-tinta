@@ -35,8 +35,13 @@
 
   function ligar(jogador) {
     if (qual === 'campeao') {
-      var c = (IT.campeoes || {})[cenario];
-      if (!c) { console.error('assistir: não há campeão para o cenário ' + cenario); return; }
+      var campeoes = IT.campeoes || {}, c = campeoes[cenario];
+      if (!c && campeoes['1x1']) {
+        if (!jogador.avisouFalta) console.warn('assistir: ainda não há campeão para ' + cenario + '; usando o do 1x1');
+        c = campeoes['1x1'];
+      }
+      jogador.avisouFalta = true;
+      if (!c) { jogador.roboLigado = true; console.error('assistir: não há campeão treinado'); return; }
       IT.robo.ligar(jogador, IT.jogo, c.genes);
     } else {
       IT.robo.ligarPerfil(jogador, IT.jogo, qual);
