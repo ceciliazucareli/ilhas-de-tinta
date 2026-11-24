@@ -348,17 +348,24 @@ alguém. Os ajustes ficam em `NIVEIS.desafio` (`js/ai.js`).
 Medido na simulação (partidas de 2 min, um "humano robô" na velocidade de
 gente contra a CPU): o Difícil corta o rastro do robô 0,2–0,5 vez por partida;
 o Impossível corta **9 a 12 vezes** e derruba o território dele de ~30% para
-15–23%. Mas jogando com estratégia — **voltas curtas e voltar para casa quando
-o 😈 chega perto** — o robô "esperto" vence o Impossível em 2 de 6 partidas (a
-mesma taxa que tem contra o Difícil).
+15–23%. Jogando com a estratégia simples de **voltas curtas e voltar para casa
+quando o 😈 chega perto**, o robô "esperto" vence o Impossível em **26 de 100**
+partidas no 1x1, **0 de 100** com 3 jogadores (+ Difícil) e **1 de 100** com 4
+(+ Difícil + Médio). Um robô treinado por algoritmo genético, na mesma velocidade
+de gente, vence **100/100**, **75/100** e **41/100**. Ele ensina três coisas:
+volte para casa assim que o 😈 conseguiria alcançar o seu rastro antes de você
+chegar em casa; faça voltas grandes e bem escolhidas; não fique vigiando ninguém.
+Detalhes em [`tests/genetico/RELATORIO.md`](tests/genetico/RELATORIO.md).
 
 ![Impossível caçando](docs/screenshots/celular-impossivel-cacando.png)
 
 A CPU planeja voltas em forma de retângulo e, a cada passo, só aceita
 direções que ainda têm um caminho de volta para casa sem cruzar o próprio
 rastro (busca em largura). Por isso os níveis Médio e Difícil nunca pisam no
-próprio rastro por descuido. A CPU é sempre um pouco mais lenta que um humano,
-para continuar vencível por uma criança.
+próprio rastro por descuido. As CPUs Fácil, Médio e Difícil são um pouco mais
+lentas que um humano, para continuar vencíveis por uma criança. O Impossível 😈
+anda na mesma velocidade que você (100%) e fica justo por outros meios: avisa
+com o 😈, tem o respiro depois de cortar e prefere caçar a seguir.
 
 ## Como o código está organizado
 
@@ -449,6 +456,35 @@ rastro (`Grade.capturar(N)` em `js/grid.js`):
   `google-chrome`; veja `tests/celular/LEIAME.md`.
 
 A página fica verde quando tudo passa.
+
+**Testes em Node** (`tests/genetico/`). Precisam do Node 26, que está em
+`~/.local/bin/node` (`export PATH=$HOME/.local/bin:$PATH`), e não usam
+dependências npm. O jogo continua sem build.
+
+- `node tests/genetico/teste_depuracao.js`: joga 36 partidas com e sem o modo
+  depuração e exige o mesmo mapa final. Também exige que o log explique uma fuga
+  por perigo, uma caçada e a escolha de uma volta.
+- `node tests/genetico/conferir.js`: roda 6 partidas no simulador Node (a lógica
+  real do jogo). O resultado tem de ser idêntico ao de `tests/genetico/conferir.html`
+  aberto no navegador pelo servidor local.
+- `node tests/genetico/treinar.js --cenario 1x1` (ou `3j`, `4j`): treina o robô
+  pelo algoritmo genético (13–30 min com 15 núcleos).
+  `node tests/genetico/validar.js --cenario 1x1` mede o robô em 100 partidas
+  novas, com intervalo de confiança.
+- `node tests/genetico/registrar.js --log partida.json --texto`: grava o log de
+  decisões de uma partida (o mesmo JSON do `?debug=1`).
+- `python3 tests/genetico/teste_depuracao_tela.py http://localhost:8000/`: testa
+  o modo depuração no Chrome.
+
+**Robôs de teste** são "humanos de mentira": andam na velocidade de uma pessoa
+e só escolhem direções.
+- **esperto:** faz voltas curtas e volta quando alguém chega perto.
+- **cuidadoso:** usa o cérebro do nível Médio.
+- **descuidado:** usa o cérebro do nível Fácil.
+- **campeão:** foi treinado pelo algoritmo genético.
+
+Para assistir: `index.html?robo=campeao` ou `index.html?robo=esperto`. Acrescente
+`&debug=1` para ver as decisões.
 
 **Teste oculto: o Impossível é vencível? E o que o robô pensa?** Em
 `tests/genetico/` há um robô treinado por algoritmo genético. Para assisti-lo:
