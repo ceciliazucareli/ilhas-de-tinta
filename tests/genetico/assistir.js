@@ -5,6 +5,9 @@
  *   index.html?robo=campeao&cenario=3j    → + CPU Difícil       (o campeão treinado para 3j)
  *   index.html?robo=campeao&cenario=4j    → + CPU Difícil + Médio
  *   index.html?robo=esperto               → o robô "esperto" fixo, para comparar
+ *   ...&debug=1                           → mostra as decisões do robô (depurar-tela.js)
+ *   index.html?debug=1                    → jogo normal pelo menu, mostrando as decisões
+ *                                           da CPU (o Impossível, se houver; &quem=N escolhe)
  *
  * Só é carregado pelo game.js quando a URL tem ?robo= (nada aparece no menu).
  * O robô joga como uma pessoa: velocidade 1, só escolhe direções.
@@ -16,6 +19,7 @@
   var params = new URLSearchParams(location.search);
   var qual = params.get('robo');
   var cenario = params.get('cenario') || '1x1';
+  var depurar = params.get('debug') === '1';
 
   function carregar(src, depois) {
     var s = document.createElement('script');
@@ -25,11 +29,14 @@
     document.body.appendChild(s);
   }
 
-  carregar('tests/genetico/robo.js', function () {
-    carregar('tests/genetico/casos.js', function () {
-      carregar('tests/genetico/resultados/campeoes.js', comecar);
-    });
-  });
+  // Carrega em sequência e depois começa.
+  var lista = ['tests/genetico/robo.js', 'tests/genetico/casos.js', 'tests/genetico/resultados/campeoes.js'];
+  if (!qual) lista = [];
+  if (depurar) lista = lista.concat(['tests/genetico/depuracao.js', 'tests/genetico/depurar-tela.js']);
+  (function proximo(i) {
+    if (i < lista.length) { carregar(lista[i], function () { proximo(i + 1); }); return; }
+    if (qual) comecar();
+  })(0);
 
   var NOME = qual === 'campeao' ? 'Robô campeão' : 'Robô ' + qual;
 
@@ -53,10 +60,11 @@
     var vagas = [{ tipo: 'humano', cor: 'rosa', nome: NOME, dificuldade: 'medio' }]
       .concat(JSON.parse(JSON.stringify(window.CENARIOS_CONFERIR[cenario] || window.CENARIOS_CONFERIR['1x1'])));
     IT.jogo.jogar({ vagas: vagas });
+    IT.ui.esconderDica(); // quem joga é o robô: a dica "deslize o dedo" só atrapalharia a vista
     // A cada partida nova ("Jogar de novo"), liga o robô no J1 de novo.
     (function vigiar() {
       var j = IT.jogo.jogadores[0];
-      if (IT.jogo.estado === 'jogando' && j && j.nome === NOME && !j.roboLigado) ligar(j);
+      if (IT.jogo.estado === 'jogando' && j && j.nome === NOME && !j.roboLigado) { ligar(j); IT.ui.esconderDica(); }
       requestAnimationFrame(vigiar);
     })();
   }

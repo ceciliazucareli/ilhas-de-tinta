@@ -535,7 +535,8 @@
     var agora = agoraMs / 1000;
     var dt = Math.min(0.05, agora - (relogioAnterior || agora)); // limita saltos
     relogioAnterior = agora;
-    passo(dt);
+    // jogo.escalaTempo: só o modo depuração oculto (?debug=1) muda (pausa, 0,25×, 0,5×).
+    passo(jogo.escalaTempo === undefined ? dt : dt * jogo.escalaTempo);
     if (jogo.tutorial && IT.tutorial) IT.tutorial.atualizar(jogo);
     IT.renderer.desenhar(jogo.grade, jogo.jogadores, agora, jogo.modo);
     requestAnimationFrame(quadro);
@@ -575,8 +576,10 @@
       document.getElementById('botao-offline-texto').textContent = 'Sozinho ou contra a CPU';
     }
     requestAnimationFrame(quadro);
-    // Oculto (tests/genetico): ?robo=campeao assiste o robô treinado contra o Impossível.
-    if (new URLSearchParams(location.search).get('robo')) {
+    // Oculto (tests/genetico): ?robo=campeao assiste o robô treinado contra o Impossível;
+    // &debug=1 (ou só ?debug=1, com CPUs) mostra as decisões do cérebro.
+    var paramsOcultos = new URLSearchParams(location.search);
+    if (paramsOcultos.get('robo') || paramsOcultos.get('debug')) {
       var assistir = document.createElement('script');
       assistir.src = 'tests/genetico/assistir.js';
       document.body.appendChild(assistir);
