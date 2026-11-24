@@ -45,9 +45,9 @@ window.IlhasDeTinta = window.IlhasDeTinta || {};
       TEMPO_CONEXAO: 8,             // segundos para desistir de conectar
       TEMPO_PROCURAR_SALA: 4,       // segundos esperando o anfitrião aparecer
       TEMPO_TURMA: 20,              // s: entrando na turma, esperando a anfitriã responder
-      // Mostrar o campo "Código da sala" no Jogar Online? false = só um link pequeno
-      // "Tenho um código" (decisão em aberto; o ?sala= e o QR continuam usando o código).
-      CODIGO_NO_MENU: true,
+      // Mostrar o campo "Código da sala" no Jogar Online? false (escolhido) = só um link
+      // pequeno "Tenho um código" que abre o campo; o ?sala= e o QR continuam usando o código.
+      CODIGO_NO_MENU: false,
       NIVEL_DE_QUEM_SAI: 'medio',   // quem sai no meio da partida vira CPU deste nível
       // Tolerância para ausências curtas (aba oculta, celular bloqueado, internet
       // piscando): só depois disso alguém é considerado "fora" (issue #6).

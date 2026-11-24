@@ -44,7 +44,9 @@ def jogar_rodada(cel, desk, anfitriao_cel, nome_foto):
     codigo = host.js('document.getElementById("sala-codigo").textContent')
     ok(codigo.startswith('TINTA-'), 'anfitrião (%s) criou a sala %s' % ('celular' if anfitriao_cel else 'desktop', codigo))
     entrar_menu_online(cli, 'Davi' if anfitriao_cel else 'Lia', not anfitriao_cel)
-    # O cliente digita só os números (no celular: teclado numérico).
+    # O código fica escondido atrás de "Tenho um código"; o cliente toca nele e
+    # digita só os números (no celular: teclado numérico).
+    apertar(cli, 'online-tenho-codigo', not anfitriao_cel)
     escrever(cli, 'online-codigo', codigo.split('-')[1], not anfitriao_cel)
     ok(cli.js('document.getElementById("online-codigo").inputMode') == 'numeric', 'campo do código usa teclado numérico')
     apertar(cli, 'online-entrar', not anfitriao_cel)

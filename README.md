@@ -146,16 +146,22 @@ Para quem joga sempre com as mesmos amigos:
 lembra). Nada vai para banco de dados: o Supabase só repassa as mensagens da
 sala, como antes.
 
-**Código da sala.** O código continua no Jogar Online (decisão em aberto). Para
-deixar só um link pequeno "Tenho um código", mude
-`config.ONLINE.CODIGO_NO_MENU` para `false`; o `?sala=` e o QR da sala avulsa
-continuam usando o código por baixo.
+**Código da sala.** O campo do código **não aparece mais** em Jogar Online:
+- no lugar dele fica só um link pequeno, **"Tenho um código"**, que abre o
+  campo;
+- o jeito principal de entrar é a turma, o link ou o QR;
+- a sala avulsa continua tendo código, porque o `?sala=` e o QR da sala avulsa
+  dependem dele;
+- quem abre um link `?sala=` já vê o campo aberto e preenchido;
+- para mostrar o campo sempre, como antes, mude
+  `config.ONLINE.CODIGO_NO_MENU` para `true`.
 
 ![Criar uma turma](docs/screenshots/turma-criar.png)
 ![Link da turma aberto num celular novo](docs/screenshots/turma-convite-celular.png)
 ![Sala da turma no celular](docs/screenshots/turma-sala-celular.png)
 ![QR da turma no celular](docs/screenshots/turma-qr-celular.png)
-![Turma salva no menu Online](docs/screenshots/turma-menu-celular.png)
+![Jogar Online no celular (360×640): turma salva e "Tenho um código"](docs/screenshots/online-menu-celular.png)
+![Jogar Online no computador](docs/screenshots/online-menu-computador.png)
 
 #### Sala avulsa (com código)
 
@@ -167,7 +173,8 @@ continuam usando o código por baixo.
    link já cai na tela online com o código preenchido — é só escrever o nome e
    tocar em **Entrar**. Se o aparelho já lembra o nome, entra direto. Há também
    **📱 Mostrar QR** com o mesmo link.
-3. Os amigos tocam em **Entrar**, digitam o código (pode ser só `4821`) e
+3. Os amigos tocam em **Tenho um código**, digitam o código (pode ser só
+   `4821`), tocam em **Entrar** e
    pronto: todos aparecem na lista da sala, cada um com sua cor. Cada um pode
    trocar para uma cor que esteja livre.
 4. O anfitrião pode completar as vagas vazias com **CPU** (e escolher o nível)

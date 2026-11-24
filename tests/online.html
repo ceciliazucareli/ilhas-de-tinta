@@ -121,6 +121,7 @@
         for (var i = 1; i < N; i++) {
           clicar(i, 'botao-online');
           escrever(i, 'online-nome', NOMES[i]);
+          clicar(i, 'online-tenho-codigo'); // o campo do código fica atrás deste link
           escrever(i, 'online-codigo', codigo.replace('-', ' ').toLowerCase());
           clicar(i, 'online-entrar');
           entradas.push(i);

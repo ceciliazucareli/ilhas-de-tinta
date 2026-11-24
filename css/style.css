@@ -478,3 +478,4 @@ body.espectador #botao-jogar-de-novo { display: none; }
 .qr-canvas { position: static; inset: auto; display: block; margin: 10px auto; border-radius: 12px; image-rendering: pixelated; }
 .qr-link { margin: 0 auto 6px; max-width: 320px; font-size: 0.85rem; color: #6a6f93; overflow-wrap: anywhere; }
 .sala-codigo.sala-codigo-turma { font-size: 2.1rem; letter-spacing: 0.02em; user-select: text; }
+#online-tenho-codigo { display: block; margin: 8px auto 0; }

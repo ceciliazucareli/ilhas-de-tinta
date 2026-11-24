@@ -1792,6 +1792,7 @@
       avisoOnline('');
       el.aviso.classList.remove('aviso-convite');
       convitePendente = null;
+      codigoAberto = false;
       el.novaTurma.hidden = true;
       ocupado(false);
       IT.jogo.irPara('online');

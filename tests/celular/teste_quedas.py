@@ -28,8 +28,13 @@ def conexao(a, campo): return js_seguro(a, 'IlhasDeTinta.online.conexao() && Ilh
 def texto(a, id_): return js_seguro(a, 'document.getElementById("%s").textContent' % id_, '')
 
 def esperar(a, expr, limite):
-    try: a.esperar(expr, limite); return True
-    except Exception: return False
+    # Tolera erro do CDP no meio de um recarregamento (o contexto da página some
+    # por um instante): antes isso fazia o teste desistir na hora, de vez em quando.
+    fim = time.time() + limite
+    while time.time() < fim:
+        if js_seguro(a, expr): return True
+        time.sleep(0.2)
+    return False
 
 def congelar(a, segundos):
     so_congelar(a); time.sleep(segundos)
