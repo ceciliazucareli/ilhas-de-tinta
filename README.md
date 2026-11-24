@@ -93,13 +93,80 @@ aparelho. Liga/desliga em **⏸ → 🔊 Som** (fica salvo).
 
 ### Online
 
+#### Turma: um link que não muda (sem digitar nada)
+
+Para quem joga sempre com as mesmas amigas:
+
+1. Em **Jogar Online**, toque em **👭 Criar uma turma**, escolha um nome (por
+   exemplo "Gatinhas") e toque em **✨ Criar turma**. Você vira a anfitriã.
+2. Na sala, **🔗 Mandar link da turma** abre o compartilhar do celular (ou
+   copia no computador) com um texto pronto para o WhatsApp e um link fixo como
+   `https://ilhas-de-tinta.vercel.app/?turma=gatinhas-k7m2x`. O final é
+   sorteado (5 letras e números, sem os que confundem, como 0/o e 1/l), para
+   ninguém de fora adivinhar.
+3. **📱 Mostrar QR** mostra um QR grande desse link para as amigas lerem com a
+   câmera. O QR é desenhado no próprio aparelho
+   (`js/vendor/qrcode-generator-1.4.4.js`), sem nenhum serviço de fora; ele
+   também existe na sala avulsa, com o link `?sala=`.
+4. **O link vale sempre** e leva sempre à **mesma sala**:
+   - quem chega primeiro vira a anfitriã;
+   - quem chega depois entra direto na sala de espera;
+   - se a partida já começou, a pessoa assiste e joga a próxima;
+   - se todo mundo saiu, quem abrir o link de novo cria a sala outra vez.
+
+   Valem também troca de anfitrião, reconexão e revanche, como em qualquer sala.
+5. Cada aparelho **guarda as turmas que já usou**. Elas aparecem no topo de
+   **Jogar Online** como botões grandes, **"👭 Jogar com a turma Gatinhas"**:
+   um toque e entra. O ✕ tira uma turma da lista (o link continua valendo).
+
+**Nome e cor lembrados.** O aparelho guarda o apelido e a última cor escolhida.
+- **Com o nome já lembrado**, abrir o link da turma, o link `?sala=` ou o QR
+  **entra direto**, sem pedir nada. Escolhemos isso porque é o mais simples
+  para crianças: não há tela nem botão a mais.
+- **Sem nome lembrado** (primeira vez no aparelho), aparece só "Seu nome" e
+  um botão "Entrar na turma Gatinhas".
+- Na sala, **✏️ trocar** muda o nome (todos veem na hora, e o novo nome fica
+  lembrado).
+- Se a cor preferida estiver ocupada, o jogo escolhe outra livre sozinho.
+
+**App instalado / tela inicial.**
+- Abrir a página da turma troca o manifest do app por um da turma: nome
+  "Ilhas de Tinta · turma Gatinhas", com `start_url` no link da turma. Assim,
+  **"Adicionar à tela inicial" a partir do link da turma cria um ícone que abre
+  direto nela**.
+  - Conferido no Chrome: instalável e sem erros.
+  - No iPhone, o Safari costuma usar o endereço da página ao adicionar, que
+    também é o link da turma, mas isso não foi testado num iPhone de verdade.
+- Com o app principal instalado, a lista de turmas resolve com um toque.
+- No iPhone, o app instalado guarda os dados separados do Safari: a turma
+  aparece na lista depois da primeira vez que se entra nela **pelo app**.
+
+**Privacidade.** No aparelho ficam só o apelido, a cor e a lista de turmas
+(`localStorage`; se o navegador bloquear, o jogo funciona igual, só não
+lembra). Nada vai para banco de dados: o Supabase só repassa as mensagens da
+sala, como antes.
+
+**Código da sala.** O código continua no Jogar Online (decisão em aberto). Para
+deixar só um link pequeno "Tenho um código", mude
+`config.ONLINE.CODIGO_NO_MENU` para `false`; o `?sala=` e o QR da sala avulsa
+continuam usando o código por baixo.
+
+![Criar uma turma](docs/screenshots/turma-criar.png)
+![Link da turma aberto num celular novo](docs/screenshots/turma-convite-celular.png)
+![Sala da turma no celular](docs/screenshots/turma-sala-celular.png)
+![QR da turma no celular](docs/screenshots/turma-qr-celular.png)
+![Turma salva no menu Online](docs/screenshots/turma-menu-celular.png)
+
+#### Sala avulsa (com código)
+
 1. Toque em **Jogar Online** e escreva seu nome.
 2. Quem vai ser o **anfitrião** toca em **Criar sala**. Aparece um código
    fácil de ditar, como **TINTA-4821**.
    Na sala, **🔗 Convidar amigos** compartilha (celular) ou copia (computador)
    um link como `https://ilhas-de-tinta.vercel.app/?sala=4821`: quem abre o
    link já cai na tela online com o código preenchido — é só escrever o nome e
-   tocar em **Entrar**.
+   tocar em **Entrar**. Se o aparelho já lembra o nome, entra direto. Há também
+   **📱 Mostrar QR** com o mesmo link.
 3. Os amigos tocam em **Entrar**, digitam o código (pode ser só `4821`) e
    pronto: todos aparecem na lista da sala, cada um com sua cor. Cada um pode
    trocar para uma cor que esteja livre.
@@ -386,7 +453,8 @@ js/ui.js              HUD (solo e multi), relógio, mensagens e tela de fim com 
 js/ai.js              a CPU (Fácil, Médio, Difícil)
 js/setup.js           tela de configuração dos jogadores (offline)
 js/online.js          modo online: salas, Presence, anfitrião e sincronização
-js/vendor/            supabase-js 2.119.0 (cópia local, versão fixa)
+js/turma.js           turma fixa (?turma=), turmas salvas, nome/cor lembrados, QR e manifest da turma
+js/vendor/            supabase-js 2.119.0 e qrcode-generator 1.4.4 (cópias locais, versões fixas)
 sw.js                 service worker (cache para funcionar sem internet)
 manifest.webmanifest  dados para instalar o jogo como aplicativo
 icones/               ícones do jogo (SVG e PNG)
@@ -400,6 +468,7 @@ tests/captura.html    testes da captura de área (abra no navegador)
 tests/simulacao.html  partidas automáticas com CPUs + teste dos controles
 tests/online.html     teste online de ponta a ponta (2 ou 4 janelas, Supabase real)
 tests/celular/        testes com toque de verdade e celular x desktop (Python + Chrome)
+tests/teste_turma.js  turma fixa e QR (Node)
 tests/genetico/       teste oculto: robô treinado por algoritmo genético × Impossível,
                       e o modo depuração (?robo=campeao&debug=1) — veja RELATORIO.md
 docs/screenshots/     capturas de tela
@@ -449,7 +518,25 @@ rastro (`Grade.capturar(N)` em `js/grid.js`):
   espera e no meio da partida; também testa quem chega no meio (espectador) e
   "Voltar para a sala".
 - `tests/celular/teste_convite.py` — o desktop cria a sala e convida; o
-  celular abre o link e entra com um toque.
+  celular abre o link e entra com um toque (e, com o nome lembrado, entra direto).
+- `tests/celular/teste_turma.py` — **turma fixa** com 4 aparelhos (2
+  computadores e 2 celulares, Supabase real):
+  - quem cria vira a anfitriã;
+  - o QR na tela, lido com o jsQR, dá o link certo;
+  - sem nome lembrado, entra só escrevendo o nome;
+  - com nome lembrado, entra direto e com a cor preferida (ou outra livre, se
+    estiver ocupada);
+  - trocar nome; turma salva no menu; espectador no meio da partida;
+  - todos saem e reabrir o link cria a sala de novo;
+  - duas pessoas abrindo uma turma vazia ao mesmo tempo acabam numa sala só;
+  - manifest da turma para "Adicionar à tela inicial".
+
+  Com `docs/screenshots` como argumento, refaz as fotos `turma-*.png`.
+- `node tests/teste_turma.js` — sem navegador:
+  - ids de turma;
+  - lista de turmas, nome e cor lembrados (também com o `localStorage` bloqueado);
+  - o QR do jogo lido de volta pelo jsQR (`tests/vendor/jsQR-1.4.0.js`,
+    usado só nos testes).
 - `tests/celular/` — testes com **toque de verdade** no Chrome headless
   (celular emulado, `Input.dispatchTouchEvent`) e uma partida online real
   **celular × desktop** trocando quem é o anfitrião. Precisa de `python3` e

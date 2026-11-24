@@ -1,5 +1,6 @@
 """Convite por link: o desktop cria a sala e toca em "Convidar"; o celular abre o
-link (?sala=1234), já encontra o código preenchido e entra com um toque.
+link (?sala=1234), já encontra o código preenchido e entra com um toque. Depois,
+com o nome já lembrado no aparelho, abrir o link entra direto (sem tocar em nada).
 Uso: python3 tests/celular/teste_convite.py [pasta_fotos]   (ILHAS_URL, padrão http://localhost:8000/)"""
 import os, sys, time, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from cdp import Chrome
@@ -25,6 +26,7 @@ try:
 
     # O celular abre o link recebido.
     cel = c2.nova_aba(); cel.instalar_coletor_de_erros(); cel.celular(390, 844)
+    cel.ir(URL); cel.js('localStorage.clear(); sessionStorage.clear()')  # aparelho "novo": sem nome lembrado
     cel.ir(URL.rsplit('/', 1)[0] + '/index.html?sala=' + codigo.split('-')[1]); time.sleep(0.8)
     ok(cel.js('IlhasDeTinta.jogo.estado') == 'online', 'o link abre direto a tela "Jogar Online"')
     ok(cel.js('document.getElementById("online-codigo").value') == codigo.split('-')[1], 'o código da sala já vem preenchido')
@@ -37,6 +39,12 @@ try:
     cel.esperar('IlhasDeTinta.jogo.estado === "sala"', 15)
     d.esperar('IlhasDeTinta.online.conexao().sala.membros.length === 2', 10)
     ok(True, 'com um toque em Entrar, o celular entrou na sala do desktop')
+    # Nome lembrado: sai e abre o link de novo → entra direto.
+    cel.js('IlhasDeTinta.online.sair("")'); time.sleep(1)
+    cel.ir(URL.rsplit('/', 1)[0] + '/index.html?sala=' + codigo.split('-')[1])
+    cel.esperar('IlhasDeTinta.jogo.estado === "sala"', 15)
+    d.esperar('IlhasDeTinta.online.conexao().sala.membros.some(function(m){return m.nome === "Lia"})', 10)
+    ok(True, 'com o nome lembrado (Lia), abrir o link de novo entra direto na sala')
     for a in (d, cel): ok(a.erros() == '[]', 'sem erros no console')
     d.js('IlhasDeTinta.online.sair("")'); cel.js('IlhasDeTinta.online.sair("")')
 finally:

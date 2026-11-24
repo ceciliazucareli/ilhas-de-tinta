@@ -465,16 +465,6 @@
     }
 
     var sala = c.sala, mudou = false;
-    // Turma: duas pessoas viraram anfitriãs ao mesmo tempo (raro)? Fica quem chegou
-    // primeiro; a outra (sozinha na sala) entra como convidada.
-    if (sala.turma && sala.estado === 'espera' && sala.membros.length === 1 && c.chegou) {
-      var outraAnfitria = Object.keys(presentes).some(function (k) {
-        if (k === c.cid || presentes[k].papel !== 'anfitriao') return false;
-        var ch = +presentes[k].chegou || 0;
-        return ch < c.chegou || (ch === c.chegou && k < c.cid);
-      });
-      if (outraAnfitria) { cederTurma(c); return; }
-    }
     // Quem sumiu: fica "saiu um pouquinho" (a remoção de vez é no vigiarConexao).
     sala.membros.forEach(function (m) {
       if (m.cid === c.cid) return;
@@ -719,7 +709,7 @@
       membros: [{ cid: c.cid, nome: c.nome, cor: corPreferida() || 'rosa' }],
       cpus: 0, nivel: 'medio', estado: 'espera', rodada: 0
     };
-    if (turma) sala.turma = { id: turma.id, nome: turma.nome };
+    if (turma) { sala.turma = { id: turma.id, nome: turma.nome }; sala.chegou = c.chegou || 0; }
     return sala;
   }
 
@@ -740,7 +730,8 @@
 
   function codigoDaTurma(id) { return 'TURMA-' + id; }
 
-  function entrarNaTurma(id, nomeTurma) {
+  /* cid: identidade a reusar (quem cedeu a vez de anfitriã continua sendo a mesma pessoa). */
+  function entrarNaTurma(id, nomeTurma, cid) {
     var motivo = motivoIndisponivel();
     if (motivo) { avisoOnline(motivo); return; }
     if (con) {
@@ -756,7 +747,7 @@
     ocupado(true);
     avisoOnline('Entrando na turma ' + turma.nome + '… 👭');
     var chegou = Date.now();
-    conectar(codigoDaTurma(id), false, nome).then(function (c) {
+    conectar(codigoDaTurma(id), false, nome, cid).then(function (c) {
       con = c;
       c.turma = turma;
       c.chegou = chegou;
@@ -783,7 +774,7 @@
     var outros = Object.keys(presentes).filter(function (k) { return k !== c.cid; });
     var temAnfitria = outros.some(function (k) { return presentes[k].papel === 'anfitriao'; });
     var temGenteNaSala = outros.some(function (k) { return presentes[k].papel !== 'anfitriao' && !presentes[k].procurando; });
-    if (!temAnfitria && !temGenteNaSala && agora - inicio >= 1200) {
+    if (!temAnfitria && !temGenteNaSala && agora - inicio >= 2000) {
       var fila = outros.filter(function (k) { return presentes[k].procurando; })
         .map(function (k) { return { cid: k, chegou: +presentes[k].chegou || 0 }; });
       fila.push({ cid: c.cid, chegou: c.chegou });
@@ -810,14 +801,20 @@
     comecarComoAnfitriao(c);
   }
 
-  /* Outra pessoa virou anfitriã da turma antes de mim: entro como convidada. */
-  function cederTurma(c) {
-    var turma = c.turma;
-    con = null;
-    fechar(c);
-    limparSessao();
-    IT.jogo.irPara('online');
-    entrarNaTurma(turma.id, turma.nome);
+  /*
+   * Duas pessoas viraram anfitriãs da turma ao mesmo tempo (o Presence ainda não
+   * tinha mostrado uma para a outra). Vale a que chegou primeiro (eleicaoMaisNova);
+   * eu viro convidada dela, na mesma sala de espera — e quem estava comigo também.
+   */
+  function virarConvidadaDaTurma(c, p) {
+    c.anfitriao = false;
+    c.timers.forEach(function (t) { clearInterval(t); clearTimeout(t); });
+    c.timers = [];
+    c.sala.anfitriao = p.a;
+    c.vistoAnfitriao = true;
+    c.ultimaSalaEm = Date.now();
+    var eu = c.sala.membros.filter(function (m) { return m.cid === c.cid; })[0];
+    rastrear(c, { nome: c.nome, cor: eu ? eu.cor : corPreferida(), papel: 'jogador' });
   }
 
   function entrarNaSala() {
@@ -1094,6 +1091,12 @@
     if (!p || !p.a || !c.sala) return false;
     var minha = c.sala.eleicao || 0, dela = p.e || 0;
     if (dela !== minha) return dela > minha;
+    // Turma: duas anfitriãs que começaram juntas — vale quem chegou primeiro
+    // (só a mensagem 'sala' traz "chegou"; as outras esperam por ela).
+    if (c.sala.turma && p.turma && p.chegou !== undefined) {
+      var minhaChegada = c.sala.chegou || 0;
+      return p.chegou < minhaChegada || (p.chegou === minhaChegada && p.a < c.sala.anfitriao);
+    }
     // Mesma eleição com dois anfitriões (raro): fica quem vem antes na lista da sala.
     var ordem = function (cid) {
       var i = c.sala.membros.map(function (m) { return m.cid; }).indexOf(cid);
@@ -1412,7 +1415,8 @@
     // Mensagem de outro anfitrião: vale a eleição mais nova.
     if (p && p.a && c.sala && p.a !== c.sala.anfitriao) {
       if (!eleicaoMaisNova(c, p)) return;          // anfitrião antigo: ignora
-      if (c.anfitriao) virarCliente(c, p);         // eu era o anfitrião: agora não sou mais
+      if (c.anfitriao && c.sala.turma && c.sala.estado === 'espera') virarConvidadaDaTurma(c, p);
+      else if (c.anfitriao) virarCliente(c, p);    // eu era o anfitrião: agora não sou mais
       else {
         c.sala.anfitriao = p.a;
         c.sala.eleicao = p.e || 0;
