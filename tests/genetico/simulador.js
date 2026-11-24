@@ -88,12 +88,15 @@ function criarMundo(opcoes) {
   ctx.IlhasDeTinta.renderer = nada();
   ctx.IlhasDeTinta.som = nada();
   vm.runInContext(fs.readFileSync(path.join(__dirname, 'robo.js'), 'utf8'), ctx, { filename: 'robo.js' });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, 'depuracao.js'), 'utf8'), ctx, { filename: 'depuracao.js' });
   const IT = ctx.IlhasDeTinta;
   const mathDoJogo = vm.runInContext('Math', ctx);
 
   /*
    * Joga uma partida inteira e devolve o resultado.
-   * cfg: { cenario, semente, genes (robô genético) | perfil ('esperto') | humanoParado: true }
+   * cfg: { cenario, semente, genes (robô genético) | perfil ('esperto') | humanoParado: true,
+   *        depurar: true (grava o registro de decisões em resultado.registro),
+   *        sujeito: número do jogador a registrar (padrão: 1, o robô) }
    */
   function jogarPartida(cfg) {
     const vagas = [{ tipo: 'humano', cor: 'rosa', nome: 'Robô', dificuldade: 'medio' }]
@@ -106,6 +109,7 @@ function criarMundo(opcoes) {
     const robo = jogo.jogadores[0];
     if (cfg.genes) IT.robo.ligar(robo, jogo, cfg.genes);
     else if (cfg.perfil) IT.robo.ligarPerfil(robo, jogo, cfg.perfil);
+    const registro = cfg.depurar ? IT.depuracao.ligar(jogo, jogo.jogadores[(cfg.sujeito || 1) - 1]) : null;
     const maxPassos = Math.ceil((IT.config.TEMPO_LIMITE + 2) / DT);
     let passos = 0;
     while (jogo.estado === 'jogando' && passos < maxPassos) { jogo.passo(DT); passos++; }
@@ -128,6 +132,7 @@ function criarMundo(opcoes) {
       // "impressão digital" do mapa final (para conferir que é determinístico e igual ao navegador)
       hash: hashMapa(jogo.grade)
     };
+    if (registro) resultado.registro = registro.exportar({ cenario: cfg.cenario, semente: cfg.semente });
     jogo.estado = 'menu';
     return resultado;
   }

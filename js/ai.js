@@ -27,6 +27,11 @@
  *             para casa assim que alguém conseguiria alcançar o rastro dele).
  *             Para continuar justo: prefere caçar humanos, mostra 😈 quando
  *             está caçando e dá um respiro depois de cortar alguém.
+ *
+ * Depuração (oculta, tests/genetico/depuracao.js): cada mudança de modo guarda
+ * também o MOTIVO (this.motivo) e, se houver um registro ligado
+ * (this.depuracao), as voltas candidatas e cada decisão são anotadas. Isso só
+ * lê o estado: as decisões são exatamente as mesmas com ou sem registro.
  */
 (function (IT) {
   'use strict';
@@ -84,6 +89,8 @@
     this.plano = [];         // pontos de passagem {x, y}
     this.modo = 'casa';      // 'casa' | 'sair' | 'voltar' | 'cacar' | 'vigiar' (Impossível)
     this.descansoCaca = 0;   // momento (s) a partir do qual pode caçar de novo
+    this.motivo = { tipo: 'inicio' }; // por que está no modo atual (só para depuração)
+    this.depuracao = null;   // registro de depuração (tests/genetico/depuracao.js) ou null
   }
 
   /* Chamado após uma penalidade ou renascimento: esquece o plano. */
@@ -91,6 +98,7 @@
     this.jogador.cacando = false;
     this.plano = [];
     this.modo = 'casa';
+    this.motivo = { tipo: 'reinicio' };
   };
 
   /* ---------- Funções de apoio ---------- */
@@ -167,27 +175,34 @@
     var p3 = { x: limitar(p2.x - v1.x * (prof - 1), 0, maxX), y: limitar(p2.y - v1.y * (prof - 1), 0, maxY) };
     if (p1.x === p2.x && p1.y === p2.y) return null; // encostado na borda: sem espaço de lado
 
-    return { pontos: [p1, p2, p3], canto: { x: x, y: y }, oposto: p2 };
+    return { pontos: [p1, p2, p3], canto: { x: x, y: y }, oposto: p2, direcao: d1, lado: d2 };
   };
 
-  /* Nota de um plano: área nova que ele cerca, menos o perigo de adversários perto. */
-  Cerebro.prototype.notaDoPlano = function (plano) {
+  /* Nota de um plano: área nova que ele cerca, menos o perigo de adversários perto.
+     "detalhe" (opcional, depuração) recebe os componentes da nota. */
+  Cerebro.prototype.notaDoPlano = function (plano, detalhe) {
     var grade = this.jogo.grade, id = this.jogador.id;
     var pesos = this.pesosDeRoubo();
     var x0 = Math.min(plano.canto.x, plano.oposto.x), x1 = Math.max(plano.canto.x, plano.oposto.x);
     var y0 = Math.min(plano.canto.y, plano.oposto.y), y1 = Math.max(plano.canto.y, plano.oposto.y);
-    var ganho = 0;
+    var ganho = 0, grama = 0, roubo = {};
     for (var y = y0; y <= y1; y++) {
       for (var x = x0; x <= x1; x++) {
         var dono = grade.dono(x, y);
-        if (dono === 0) ganho += 1;
-        else if (dono !== id) ganho += pesos[dono] || 1.5; // tomar território de adversário vale mais
+        if (dono === 0) { ganho += 1; grama++; }
+        else if (dono !== id) { ganho += pesos[dono] || 1.5; roubo[dono] = (roubo[dono] || 0) + 1; } // tomar território de adversário vale mais
       }
     }
     var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     var perigo = this.adversarioMaisPerto(Math.round(cx), Math.round(cy));
     var raio = (x1 - x0 + y1 - y0) / 2 + 3;
+    var antes = ganho;
     if (perigo < raio) ganho *= 0.4; // adversário perto da área: arriscado
+    if (detalhe) {
+      detalhe.area = (x1 - x0 + 1) * (y1 - y0 + 1); detalhe.grama = grama; detalhe.roubo = roubo;
+      detalhe.pesosRoubo = pesos; detalhe.antesDoRisco = antes; detalhe.adversarioMaisPerto = perigo;
+      detalhe.raioDeRisco = raio; detalhe.risco = perigo < raio; detalhe.fatorRisco = perigo < raio ? 0.4 : 1;
+    }
     return ganho;
   };
 
@@ -211,15 +226,25 @@
   Cerebro.prototype.criarPlano = function () {
     var melhor = null, melhorNota = -Infinity;
     var tentativas = Math.max(this.nivel.candidatos, 4);
+    var lista = this.depuracao ? [] : null; // depuração: todas as voltas comparadas
     for (var i = 0; i < tentativas; i++) {
       var plano = this.montarPlano(NOMES_DIRECOES[Math.floor(Math.random() * 4)]);
       if (!plano) continue;
-      if (this.nivel.candidatos === 1) { melhor = plano; break; }
-      var nota = this.notaDoPlano(plano);
+      if (this.nivel.candidatos === 1) {
+        melhor = plano;
+        if (lista) { var d1 = {}; lista.push({ plano: plano, nota: this.notaDoPlano(plano, d1), detalhe: d1 }); }
+        break;
+      }
+      var detalhe = lista ? {} : undefined;
+      var nota = this.notaDoPlano(plano, detalhe);
+      if (lista) lista.push({ plano: plano, nota: nota, detalhe: detalhe });
       if (nota > melhorNota) { melhorNota = nota; melhor = plano; }
     }
     this.plano = melhor ? melhor.pontos : [];
     this.modo = melhor ? 'sair' : 'casa';
+    this.planoEscolhido = melhor;
+    this.motivo = melhor ? { tipo: 'volta', nota: lista ? null : melhorNota } : { tipo: 'semVolta' };
+    if (lista) this.depuracao.candidatos(this, lista, melhor);
   };
 
   /* Difícil: procura o rastro de um adversário perto para cortar. */
@@ -297,7 +322,7 @@
         if (g.rastros[k] !== alvo.id || dist[k] < 0 || dist[k] > n.alcance) continue;
         var kx = k % w, ky = (k - kx) / w;
         if (kx === e.x && ky === e.y) continue; // mesma célula que ele: não corta
-        if (dist[k] / vEu < tempoDele && (!melhor || dist[k] < melhor.passos)) melhor = { x: kx, y: ky, passos: dist[k] };
+        if (dist[k] / vEu < tempoDele && (!melhor || dist[k] < melhor.passos)) melhor = { x: kx, y: ky, passos: dist[k], alvo: alvo.id, tempoDele: tempoDele, onde: 'rastro' };
       }
       // b) caminho que ele deve fazer até em casa (cada célula vira rastro quando ele passa)
       if (volta) {
@@ -306,28 +331,38 @@
           if (d < 0 || d > n.alcance) continue;
           var t = d / vEu;
           var viraRastro = (i + 1 - e.progresso) / vEle;
-          if (t > viraRastro + 0.05 && t < tempoDele && (!melhor || d < melhor.passos)) melhor = { x: c.x, y: c.y, passos: d };
+          if (t > viraRastro + 0.05 && t < tempoDele && (!melhor || d < melhor.passos)) melhor = { x: c.x, y: c.y, passos: d, alvo: alvo.id, tempoDele: tempoDele, onde: 'caminho' };
         }
       }
     }, this);
     return melhor;
   };
 
-  /* Alguém consegue chegar no MEU rastro antes de eu chegar em casa? */
-  Cerebro.prototype.emPerigo = function () {
+  /* Alguém consegue chegar no MEU rastro antes de eu chegar em casa?
+     "detalhe" (opcional, depuração) recebe os passos de cada um. */
+  Cerebro.prototype.emPerigo = function (detalhe) {
     var g = this.jogo.grade, eu = this.jogador, e = eu.explorador;
     if (!g.temRastro(eu.id)) return false;
     var minhaVolta = this.distanciaDeCasa(e.x, e.y);
-    var vEu = e.velocidade || 1, folga = this.nivel.folgaPerigo;
-    return this.jogo.jogadores.some(function (j) {
-      if (j === eu) return false;
+    var vEu = e.velocidade || 1, folga = this.nivel.folgaPerigo || 0;
+    var limite = (minhaVolta + folga) / vEu;
+    if (detalhe) { detalhe.minhaVolta = minhaVolta; detalhe.folga = folga; detalhe.limite = limite; detalhe.adversarios = []; }
+    var perigo = false;
+    for (var i = 0; i < this.jogo.jogadores.length; i++) {
+      var j = this.jogo.jogadores[i];
+      if (j === eu) continue;
       var c = g.buscarCaminho(j.explorador.x, j.explorador.y,
         function (x, y) { return g.rastro(x, y) === eu.id; },
-        function (x, y) { return g.rastro(x, y) === j.id; });
-      if (!c) return false;
-      return c.length / (j.explorador.velocidade || 1) <= (minhaVolta + folga) / vEu;
-    });
+        rastroDe(g, j.id));
+      var tempo = c ? c.length / (j.explorador.velocidade || 1) : Infinity;
+      var alcanca = !!c && tempo <= limite;
+      if (detalhe) detalhe.adversarios.push({ id: j.id, passos: c ? c.length : null, tempo: tempo, alcanca: alcanca });
+      if (alcanca) { perigo = true; if (!detalhe) break; }
+    }
+    return perigo;
   };
+
+  function rastroDe(g, id) { return function (x, y) { return g.rastro(x, y) === id; }; }
 
   /* Vigiar: ir para perto do caminho de volta de quem saiu de casa. */
   Cerebro.prototype.pontoDeVigia = function (dist) {
@@ -338,7 +373,7 @@
       if (!volta || !volta.length) return;
       volta.forEach(function (c) {
         var d = dist[c.y * w + c.x];
-        if (d > 0 && (!melhor || d < melhor.passos)) melhor = { x: c.x, y: c.y, passos: d };
+        if (d > 0 && (!melhor || d < melhor.passos)) melhor = { x: c.x, y: c.y, passos: d, alvo: alvo.id, voltaDele: volta.length };
       });
     }, this);
     return melhor;
@@ -352,32 +387,44 @@
     if (cortes > (this.cortesVistos || 0)) {
       this.cortesVistos = cortes;
       this.descansoCaca = agora + n.respiro;
-      if (this.modo === 'cacar' || this.modo === 'vigiar') { this.modo = rastro > 0 ? 'voltar' : 'casa'; this.plano = []; }
+      if (this.modo === 'cacar' || this.modo === 'vigiar') {
+        this.modo = rastro > 0 ? 'voltar' : 'casa'; this.plano = [];
+        this.motivo = { tipo: 'respiro', segundos: n.respiro };
+      }
     }
     var descansando = agora < (this.descansoCaca || 0);
 
     // Não deixa brecha: se alguém alcança meu rastro antes de eu chegar em casa, volto já.
-    if (rastro > 0 && this.emPerigo()) {
+    var detalhePerigo = this.depuracao ? {} : undefined;
+    if (rastro > 0 && this.emPerigo(detalhePerigo)) {
       this.modo = 'voltar'; this.plano = [];
+      this.motivo = { tipo: 'perigo', detalhe: detalhePerigo || null };
       return;
     }
 
     var dist = this.mapaDeDistancias(e.x, e.y, function (x, y) { return self.ehMeuRastro(x, y); });
     if (!descansando) {
       var corte = this.pontoDeCorte(dist);
-      if (corte) { this.modo = 'cacar'; this.plano = [corte]; return; }
+      if (corte) { this.modo = 'cacar'; this.plano = [corte]; this.motivo = { tipo: 'corte', corte: corte }; return; }
       var vigia = rastro <= n.vigiaMaxRastro ? this.pontoDeVigia(dist) : null;
-      if (vigia) { this.modo = 'vigiar'; this.plano = [vigia]; return; }
+      if (vigia) { this.modo = 'vigiar'; this.plano = [vigia]; this.motivo = { tipo: 'vigia', vigia: vigia }; return; }
     }
     if (this.modo === 'cacar' || this.modo === 'vigiar') {
       this.modo = rastro > 0 ? 'voltar' : 'casa';
       this.plano = [];
+      this.motivo = { tipo: 'fimCaca', descansando: descansando };
     }
   };
 
   /* ---------- Decisão a cada célula ---------- */
 
+  /* A cada célula: decide e pede a direção (e anota no registro de depuração, se houver). */
   Cerebro.prototype.decidir = function () {
+    var direcao = this.escolherDirecao();
+    if (this.depuracao) this.depuracao.decisao(this, direcao);
+  };
+
+  Cerebro.prototype.escolherDirecao = function () {
     var e = this.jogador.explorador, grade = this.jogo.grade, n = this.nivel;
     var self = this;
     var emCasa = this.ehMeu(e.x, e.y);
@@ -392,15 +439,16 @@
     while (this.plano.length && this.plano[0].x === e.x && this.plano[0].y === e.y) this.plano.shift();
 
     if (rastro > 0 && this.modo !== 'voltar') {
-      if (rastro >= n.rastroMax) this.modo = 'voltar';
-      else if (n.medo && this.adversarioMaisPerto(e.x, e.y) <= n.medo) this.modo = 'voltar';
-      else if (this.plano.length === 0 && this.modo !== 'cacar') this.modo = 'voltar';
+      var perto;
+      if (rastro >= n.rastroMax) { this.modo = 'voltar'; this.motivo = { tipo: 'rastroMax', rastro: rastro, max: n.rastroMax }; }
+      else if (n.medo && (perto = this.adversarioMaisPerto(e.x, e.y)) <= n.medo) { this.modo = 'voltar'; this.motivo = { tipo: 'medo', distancia: perto, medo: n.medo }; }
+      else if (this.plano.length === 0 && this.modo !== 'cacar') { this.modo = 'voltar'; this.motivo = { tipo: 'fimDaVolta' }; }
     }
 
     // Impossível 😈: prever, caçar, vigiar e não deixar brecha.
     if (n.estrategista) {
       this.decidirDesafio(rastro, emCasa);
-      if (rastro > 0 && this.modo === 'sair' && !this.plano.length) this.modo = 'voltar';
+      if (rastro > 0 && this.modo === 'sair' && !this.plano.length) { this.modo = 'voltar'; this.motivo = { tipo: 'fimDaVolta' }; }
     }
     // Mostra 😈 em cima da cabeça enquanto caça ou vigia alguém — e por pelo menos
     // 1,2 s, para o aviso não ficar piscando e dar tempo de a criança perceber.
@@ -415,22 +463,25 @@
         if (this.modo !== 'cacar') this.descansoCaca = this.jogo.ultimoTempo + n.esperaCaca;
         this.modo = 'cacar';
         this.plano = [caca];
+        this.motivo = { tipo: 'caca', ponto: caca, alvo: grade.rastro(caca.x, caca.y) };
       } else if (this.modo === 'cacar') {
         this.modo = rastro > 0 ? 'voltar' : 'casa';
         this.plano = [];
+        this.motivo = { tipo: 'fimCaca' };
       }
     }
 
     var opcoes = this.direcoesPossiveis();
-    if (!opcoes.length) return;
+    if (!opcoes.length) return null;
 
     // Nunca pisar no próprio rastro de propósito.
     var semRastro = opcoes.filter(function (o) { return !self.ehMeuRastro(o.x, o.y); });
 
     // Fácil: às vezes vira ao acaso (sem conferir o caminho de volta).
     if (!n.seguro && rastro > 0 && Math.random() < n.acaso && semRastro.length) {
-      e.pedirDirecao(semRastro[Math.floor(Math.random() * semRastro.length)].nome);
-      return;
+      var aoAcaso = semRastro[Math.floor(Math.random() * semRastro.length)].nome;
+      e.pedirDirecao(aoAcaso);
+      return aoAcaso;
     }
 
     // Médio/Difícil (e o Fácil fora das viradas ao acaso): só direções com volta garantida.
@@ -452,10 +503,11 @@
 
     if (!melhor || melhorDist === Infinity) {
       // Ponto do plano inalcançável: desiste e volta para casa.
-      if (alvo) { this.plano = []; this.modo = rastro > 0 ? 'voltar' : 'casa'; }
+      if (alvo) { this.plano = []; this.modo = rastro > 0 ? 'voltar' : 'casa'; this.motivo = { tipo: 'inalcancavel' }; }
       melhor = melhor || lista[0];
     }
     e.pedirDirecao(melhor.nome);
+    return melhor.nome;
   };
 
   IT.ia = {

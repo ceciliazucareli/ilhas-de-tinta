@@ -65,32 +65,44 @@
 
     // Nota de uma volta: grama vale 1, território de adversário vale pesoRoubo,
     // voltas junto à borda ganham bônus (pesoBorda) e adversário perto desvaloriza.
-    cerebro.notaDoPlano = function (plano) {
+    // "detalhe" (opcional, depuração) recebe os componentes da nota.
+    cerebro.notaDoPlano = function (plano, detalhe) {
       var grade = this.jogo.grade, id = this.jogador.id;
       var x0 = Math.min(plano.canto.x, plano.oposto.x), x1 = Math.max(plano.canto.x, plano.oposto.x);
       var y0 = Math.min(plano.canto.y, plano.oposto.y), y1 = Math.max(plano.canto.y, plano.oposto.y);
-      var ganho = 0, area = 0;
+      var ganho = 0, area = 0, grama = 0, roubo = {};
       for (var y = y0; y <= y1; y++) {
         for (var x = x0; x <= x1; x++) {
           var dono = grade.dono(x, y);
           area++;
-          if (dono === 0) ganho += 1;
-          else if (dono !== id) ganho += p.pesoRoubo;
+          if (dono === 0) { ganho += 1; grama++; }
+          else if (dono !== id) { ganho += p.pesoRoubo; roubo[dono] = (roubo[dono] || 0) + 1; }
         }
       }
       var distBorda = Math.min(x0, y0, grade.colunas - 1 - x1, grade.linhas - 1 - y1);
       var pertoDaBorda = Math.max(0, 1 - distBorda / 5);
-      ganho += p.pesoBorda * area * (pertoDaBorda - 0.5);
+      var borda = p.pesoBorda * area * (pertoDaBorda - 0.5);
+      ganho += borda;
       var perigo = this.adversarioMaisPerto(Math.round((x0 + x1) / 2), Math.round((y0 + y1) / 2));
       var raio = (x1 - x0 + y1 - y0) / 2 + 3 + p.raioPerigo;
+      var antes = ganho;
       if (perigo < raio) ganho *= (1 - p.cautela);
+      if (detalhe) {
+        detalhe.area = area; detalhe.grama = grama; detalhe.roubo = roubo; detalhe.pesoRoubo = p.pesoRoubo;
+        detalhe.borda = borda; detalhe.antesDoRisco = antes; detalhe.adversarioMaisPerto = perigo;
+        detalhe.raioDeRisco = raio; detalhe.risco = perigo < raio; detalhe.fatorRisco = perigo < raio ? 1 - p.cautela : 1;
+      }
       return ganho;
     };
 
     // Espera um pouco em casa depois de pintar (fica andando dentro do território).
     var criarPlanoOriginal = cerebro.criarPlano;
     cerebro.criarPlano = function () {
-      if (this.jogo.ultimoTempo < (this.esperaAte || 0)) { this.plano = []; this.modo = 'casa'; return; }
+      if (this.jogo.ultimoTempo < (this.esperaAte || 0)) {
+        this.plano = []; this.modo = 'casa';
+        this.motivo = { tipo: 'espera', segundos: p.esperaEmCasa };
+        return;
+      }
       criarPlanoOriginal.call(this);
     };
     var decidirOriginal = cerebro.decidir;
