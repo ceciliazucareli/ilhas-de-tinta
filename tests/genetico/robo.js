@@ -115,9 +115,16 @@
 
   function ligarPerfil(jogador, jogo, perfil) {
     var cerebro = IT.ia.criar(jogador, jogo);
-    cerebro.nivel = PERFIS[perfil] || IT.ia.NIVEIS.medio;
     jogador.ia = cerebro;
     jogador.explorador.controlador = cerebro;
+    if (perfil === 'cpuDificil') {
+      // referência: a CPU Difícil de verdade (cérebro e velocidade dela) no lugar do J1
+      cerebro.nivel = IT.ia.NIVEIS.dificil;
+      jogador.tipo = 'cpu'; jogador.dificuldade = 'dificil';
+      jogador.explorador.velocidade = IT.DIFICULDADES.dificil.velocidade;
+      return cerebro;
+    }
+    cerebro.nivel = PERFIS[perfil] || IT.ia.NIVEIS.medio;
     jogador.explorador.velocidade = 1;
     return cerebro;
   }

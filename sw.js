@@ -9,7 +9,7 @@
  * Estratégia: "cache primeiro". O modo Online continua precisando de internet
  * (as conexões com o Supabase não passam pelo cache).
  */
-var VERSAO = 'ilhas-de-tinta-v6';
+var VERSAO = 'ilhas-de-tinta-v7';
 
 var ARQUIVOS = [
   './',

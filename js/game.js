@@ -575,6 +575,12 @@
       document.getElementById('botao-offline-texto').textContent = 'Sozinho ou contra a CPU';
     }
     requestAnimationFrame(quadro);
+    // Oculto (tests/genetico): ?robo=campeao assiste o robô treinado contra o Impossível.
+    if (new URLSearchParams(location.search).get('robo')) {
+      var assistir = document.createElement('script');
+      assistir.src = 'tests/genetico/assistir.js';
+      document.body.appendChild(assistir);
+    }
   });
 
   // Exposto para depuração e testes no console.
