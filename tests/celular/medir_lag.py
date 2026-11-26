@@ -87,6 +87,7 @@ try:
         time.sleep(0.02)
     medidas = json.loads(c.js('JSON.stringify(IlhasDeTinta.online.medidasVirada().cliente)'))
     noAnfitriao = json.loads(h.js('JSON.stringify(IlhasDeTinta.online.medidasVirada().anfitriao)'))
+    diretas = json.loads(c.js('JSON.stringify(IlhasDeTinta.online.medidasVirada().diretas || null)'))
     erros = (h.erros(), c.erros())
 finally:
     for x in ch: x.fechar()
@@ -102,14 +103,24 @@ def verdade(t, i):
             return [pa[0] + (pb[0] - pa[0]) * f, pa[1] + (pb[1] - pa[1]) * f], pb[2]
     return None, None
 
+def viradas_de_verdade(i):
+    ts, ant = [], None
+    for a in amostrasH:
+        d = a['j'][i][2]
+        if ant and d and d != ant: ts.append(a['t'])
+        if d: ant = d
+    return ts
+
 def analisar(i):
     erros_, corrida, puxoes, ant = [], [], 0, None
+    curvas, tv = [], viradas_de_verdade(i)
     for s in amostrasC:
         if s['e'] != 'jogando': continue
         v, d = verdade(s['t'], i)
         if v is None: continue
         q = s['j'][i]
         erros_.append(abs(q[0] - v[0]) + abs(q[1] - v[1]))
+        if any(0 <= s['t'] - t0 <= 600 for t0 in tv): curvas.append(erros_[-1])
         # "corrida": distância à frente da verdade na direção que o cliente mostra
         if q[2]:
             dx, dy = {'cima': (0, -1), 'baixo': (0, 1), 'esquerda': (-1, 0), 'direita': (1, 0)}[q[2]]
@@ -121,6 +132,7 @@ def analisar(i):
     n = max(1, len(erros_))
     return {'erro_medio': round(sum(erros_) / n, 2), 'erro_p95': round(p(erros_, 0.95), 2), 'erro_max': round(max(erros_ or [0]), 2),
             'acima_1_5': round(100.0 * sum(1 for e in erros_ if e > 1.5) / n, 1),
+            'erro_nas_curvas': round(sum(curvas) / max(1, len(curvas)), 2), 'erro_nas_curvas_p95': round(p(curvas, 0.95), 2),
             'corrida_p95': round(p(corrida, 0.95), 2), 'corrida_max': round(max(corrida or [0]), 2), 'puxoes': puxoes, 'amostras': n}
 
 r = {'atraso_ms': ATRASO, 'variacao_ms': VARIACAO, 'cpu_lenta': CPU,
@@ -128,6 +140,7 @@ r = {'atraso_ms': ATRASO, 'variacao_ms': VARIACAO, 'cpu_lenta': CPU,
      'meu_rastro_atrasado_pct': round(100.0 * sum(s['j'][iB][3] for s in amostrasC if s['e'] == 'jogando') / max(1, sum(1 for s in amostrasC if s['e'] == 'jogando' and s['j'][iB][2])), 1),
      'viradas': {'pedidas': medidas['pedidas'], 'correcoes': medidas['correcoes'], 'mantidas': medidas['mantidas'],
                  'confirmacao_ms_media': round(sum(medidas['anfitriaoConfirmouMs']) / max(1, len(medidas['anfitriaoConfirmouMs']))),
-                 'no_anfitriao': {k: noAnfitriao.get(k) for k in ('exatas', 'rebobinadas', 'agendadas', 'atrasadas')}},
+                 'no_anfitriao': {k: noAnfitriao.get(k) for k in ('exatas', 'rebobinadas', 'agendadas', 'atrasadas')},
+                 'diretas_no_cliente': diretas},
      'erros_console': erros}
 print(json.dumps(r, ensure_ascii=False))

@@ -259,6 +259,12 @@ Realtime** (canais **Broadcast** e **Presence**) para repassar mensagens:
     lugar certo;
   - se chega adiantada, guarda a virada até o explorador chegar lá.
 
+  **As viradas também vão direto para os outros aparelhos:** a mensagem
+  "virei aqui" de cada jogador (inclusive a do anfitrião) chega a todos, e
+  cada aparelho já vira aquele explorador na célula certa, sem esperar o
+  estado do anfitrião. Com internet de casa simulada, o erro nas curvas do
+  personagem dos outros caiu de ~4 para ~2,7 células.
+
   O aparelho confere a previsão com o estado que chega do anfitrião
   ("atrasado", pelo tempo da internet):
   - se o anfitrião está em algum ponto do caminho que o explorador acabou de

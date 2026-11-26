@@ -31,7 +31,9 @@
  *   msg       anfitrião → todos   balões de mensagem ("Ops!", "+12!")
  *   fim       anfitrião → todos   ranking final
  *   voltarSala anfitrião → todos  todos voltam para a sala de espera
- *   dir       cliente → anfitrião  nova direção do explorador do cliente
+ *   dir       qualquer um → todos  nova direção (e célula da virada) de um explorador humano:
+ *                                  o anfitrião aplica; os outros aparelhos já viram o
+ *                                  explorador dele na hora, sem esperar o anfitrião
  *   revanche  qualquer um → anfitrião  "quero revanche" (voto)
  *   votos     anfitrião → todos   quem já votou; com todos os humanos, começa outra partida
  *   pedirEstado  cliente → anfitrião  "voltei / cheguei no meio: me mande tudo"
@@ -172,6 +174,7 @@
       // Usados pelo game.js através de jogo.rede:
       direcionar: MetodosRede.direcionar,
       preverChegada: MetodosRede.preverChegada,
+      chegadaDeOutro: MetodosRede.chegadaDeOutro,
       jogarDeNovo: MetodosRede.jogarDeNovo,
       mudarJogadores: MetodosRede.mudarJogadores,
       pausar: MetodosRede.pausar,
@@ -1271,7 +1274,7 @@
       var e = jogadores[i] && jogadores[i].explorador;
       if (!e) return;
       if (c && jogadores[i].tipo === 'humano' && jogadores[i].local && reconciliar(c, jogadores[i], p)) return;
-      if (c && seguirPrevisaoDosOutros(e, p)) { jogadores[i].cacando = !!p[7]; return; }
+      if (c && seguirPrevisaoDosOutros(c, e, p)) { jogadores[i].cacando = !!p[7]; return; }
       e.x = p[0]; e.y = p[1]; e.alvoX = p[2]; e.alvoY = p[3];
       e.progresso = p[4] / 100;
       e.direcao = p[5] >= 0 ? DIRS[p[5]] : null;
@@ -1367,16 +1370,22 @@
    * previsão, mantemos a previsão (senão ele "voltaria" a cada mensagem);
    * se divergiu (virou, Ops!), vai para a posição certa deslizando.
    */
-  function seguirPrevisaoDosOutros(e, p) {
+  function seguirPrevisaoDosOutros(c, e, p) {
     var hx = p[0] + (p[2] - p[0]) * p[4] / 100, hy = p[1] + (p[3] - p[1]) * p[4] / 100;
     var dirH = p[5] >= 0 ? DIRS[p[5]] : null;
+    var saltou = p[9] !== undefined && e.saltosVistos !== undefined && p[9] !== e.saltosVistos;
+    if (p[9] !== undefined) e.saltosVistos = p[9];
+    // Virada direta (mensagem 'dir' do próprio jogador) que este estado do anfitrião
+    // ainda não inclui: mantém a virada se ele está no caminho que já desenhei.
+    if (!saltou && e.entradaDireta && (p[8] || 0) < e.entradaDireta &&
+        anfitriaoNoMeuCaminho(e, p, true, celulasDeFolga(c, e))) return true;
     var minha = e.posicaoVisual();
     var px_ = minha.x - (e.ajusteX || 0), py_ = minha.y - (e.ajusteY || 0);
     if (dirH && dirH === e.direcao) {
       var v = IT.DIRECOES[dirH];
       var aFrente = (px_ - hx) * v.x + (py_ - hy) * v.y;           // quanto a previsão está à frente
       var deLado = Math.abs((px_ - hx) * v.y) + Math.abs((py_ - hy) * v.x);
-      if (aFrente >= -0.05 && aFrente <= 1.5 && deLado < 0.05) return true;
+      if (!saltou && aFrente >= -0.05 && aFrente <= 1.5 && deLado < 0.05) return true;
     }
     var de = e.posicaoVisual();
     e.x = p[0]; e.y = p[1]; e.alvoX = p[2]; e.alvoY = p[3];
@@ -1384,6 +1393,8 @@
     e.direcao = dirH;
     e.ultimaDirecao = DIRS[p[6]] || e.ultimaDirecao;
     e.proximaDirecao = null;
+    e.caminho = [];
+    e.viradaAgendada = null;
     if (Math.abs(de.x - hx) + Math.abs(de.y - hy) < 4) e.corrigirSuave(de.x, de.y);
     return true;
   }
@@ -1466,7 +1477,8 @@
     jogo.aoFim = null;
     c.ultimaMensagemEm = Date.now();
     jogo.jogar(configuracao, { semIA: true });
-    jogo.jogadores.forEach(function (j) { if (j.cid === c.cid) j.explorador.caminho = []; });
+    // Caminho recente de cada explorador (meu e dos outros): para conferir as previsões.
+    jogo.jogadores.forEach(function (j) { j.explorador.caminho = []; });
     IT.ui.modoEspectador(c.espectador);
     avisoSala('');
     if (!c.vigiando) { c.vigiando = true; vigiarAnfitriao(c); }
@@ -1543,6 +1555,7 @@
     }
 
     // Cliente.
+    if (evento === 'dir') { viradaDireta(c, p); return; }
     if (evento === 'tchau') {
       if (c.sala && p.cid === c.sala.anfitriao) eleger(c);
       return;
@@ -1978,7 +1991,7 @@
       medidasVirada = { pedidas: 0, mostradaNaHoraMs: [], anfitriaoConfirmouMs: [], correcoes: 0, mantidas: 0 };
       estatViradas = { exatas: 0, rebobinadas: 0, atrasadas: 0, agendadas: 0, antigoAtrasaria: 0 };
     },
-    medidasVirada: function () { return { cliente: medidasVirada, anfitriao: estatViradas }; },
+    medidasVirada: function () { return { cliente: medidasVirada, anfitriao: estatViradas, diretas: estatDiretas }; },
     sair: sair
   };
 
@@ -1992,6 +2005,71 @@
   }
 
   /* Métodos que o game.js chama em jogo.rede (a conexão da sala). */
+  /* ---------- Viradas diretas (sem esperar o anfitrião) ---------- */
+
+  /*
+   * A mensagem 'dir' de cada jogador (com a célula da virada) chega a TODOS os
+   * aparelhos, não só ao anfitrião. Quem não é o anfitrião já vira o explorador
+   * dela na hora, na célula certa — antes só virava quando o estado do anfitrião
+   * chegava (internet de ida até ele + espera da próxima mensagem + volta).
+   * O anfitrião continua mandando o estado, que confirma (ou corrige) depois.
+   */
+  var estatDiretas = { recebidas: 0, naHora: 0, guardadas: 0, voltou: 0, longe: 0 };
+  function viradaDireta(c, p) {
+    var jogo = IT.jogo;
+    if (jogo.rede !== c || jogo.estado !== 'jogando' || typeof p.x !== 'number' || p.cid === c.cid) return;
+    var j = jogo.jogadores.filter(function (x) { return x.cid === p.cid && !x.local; })[0];
+    var d = DIRS[p.d];
+    if (!j || !d || j.tipo !== 'humano') return;
+    var e = j.explorador;
+    estatDiretas.recebidas++;
+    if (p.n) e.entradaDireta = Math.max(e.entradaDireta || 0, p.n);
+    e.viradaAgendada = null;
+    // Ainda não chegou na célula da virada (o normal: aqui ele aparece um pouco atrás).
+    if (e.direcao ? (e.alvoX === p.x && e.alvoY === p.y) : (e.x === p.x && e.y === p.y)) {
+      e.pedirDirecao(d); estatDiretas.naHora++; return;
+    }
+    if (e.direcao && aFrenteNaLinha(e, p.x, p.y)) {
+      e.viradaAgendada = { x: p.x, y: p.y, d: d, esperou: 0 }; estatDiretas.guardadas++; return;
+    }
+    // Já passou da célula (seguiu reto um pouco demais): volta para lá já virado, deslizando.
+    var v = IT.DIRECOES[d];
+    var passou = Math.abs(e.x - p.x) + Math.abs(e.y - p.y);
+    if (passou > O.REBOBINAR_CELULAS || !jogo.grade.dentro(p.x + v.x, p.y + v.y)) { estatDiretas.longe++; return; }
+    var de = e.posicaoVisual();
+    e.x = p.x; e.y = p.y;
+    e.alvoX = p.x + v.x; e.alvoY = p.y + v.y;
+    e.progresso = Math.min(0.95, Math.max(0, passou - 1 + e.progresso));
+    e.direcao = d; e.ultimaDirecao = d;
+    e.proximaDirecao = null; e.filaDirecao = null;
+    e.caminho = [];
+    e.corrigirSuave(de.x, de.y);
+    estatDiretas.voltou++;
+  }
+
+  /* Cliente: o explorador de outro jogador chegou numa célula (vira se havia virada guardada). */
+  function chegadaDeOutro(j, x, y) {
+    var e = j.explorador, ag = e.viradaAgendada;
+    if (ag) {
+      if (ag.x === x && ag.y === y) { e.viradaAgendada = null; e.pedirDirecao(ag.d); }
+      else if (++ag.esperou > 10) e.viradaAgendada = null;
+    }
+    return true;
+  }
+
+  /* Anfitrião: a própria virada também vai na hora para os outros aparelhos. */
+  function direcionarAnfitriao(c, meu, direcao) {
+    var e = meu.explorador;
+    if (e.direcao === direcao && !e.proximaDirecao) return true; // nada muda
+    var x = e.direcao ? e.alvoX : e.x, y = e.direcao ? e.alvoY : e.y;
+    var aceita = e.pedirDirecao(direcao);
+    if (aceita && e.proximaDirecao === direcao) {
+      meu.ultimaEntrada = (meu.ultimaEntrada || 0) + 1;
+      enviar(c, 'dir', { cid: c.cid, d: DIRS.indexOf(direcao), x: x, y: y, n: meu.ultimaEntrada });
+    }
+    return aceita;
+  }
+
   /* ---------- Previsão do MEU rastro (cliente) ---------- */
 
   /*
@@ -2048,11 +2126,12 @@
 
   var MetodosRede = {
     preverChegada: function (j, x, y) { return preverChegada(this, j, x, y); },
+    chegadaDeOutro: function (j, x, y) { return chegadaDeOutro(j, x, y); },
     direcionar: function (direcao) {
       var c = this;
       var meu = IT.jogo.jogadores.filter(function (j) { return j.cid === c.cid && j.tipo === 'humano'; })[0];
       if (!meu) return false;
-      if (c.anfitriao) return meu.explorador.pedirDirecao(direcao);
+      if (c.anfitriao) return direcionarAnfitriao(c, meu, direcao);
       // Cliente: meia-volta é recusada aqui mesmo (o anfitrião também recusaria).
       var e = meu.explorador;
       if (e.direcao && IT.OPOSTA[e.direcao] === direcao) return false;

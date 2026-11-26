@@ -531,7 +531,9 @@
       } else {
         // Os outros: seguem em linha reta célula a célula até a próxima mensagem do
         // anfitrião (que chega 6x por segundo) — se divergir, deslizam até a posição certa.
-        e.atualizar(dt, jogo.grade, null);
+        // As viradas deles chegam direto (mensagem 'dir') e acontecem na célula certa.
+        var redeOutros = jogo.rede;
+        e.atualizar(dt, jogo.grade, redeOutros.chegadaDeOutro ? function (x, y) { return redeOutros.chegadaDeOutro(j, x, y); } : null);
       }
       e.suavizar(dt);
     });
