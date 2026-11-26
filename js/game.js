@@ -119,13 +119,19 @@
    */
   function lembrarChegada(j, x, y, pintouRastro, evento) {
     if (!jogo.rede) return;
-    if (evento) { j.historico = []; return; }
-    j.historico = (j.historico || []).concat([{ x: x, y: y, pintou: pintouRastro }]).slice(-3);
+    if (evento) { j.historico = []; j.viradasAgendadas = []; return; }
+    j.historico = (j.historico || []).concat([{ x: x, y: y, pintou: pintouRastro }]).slice(-(C.ONLINE.REBOBINAR_CELULAS + 1));
   }
 
   function aoChegar(j, x, y) {
     var grade = jogo.grade;
     var rastro = grade.rastro(x, y);
+    // Online: virada que chegou ANTES da hora (a internet varia) e esperava esta célula.
+    if (j.viradasAgendadas && j.viradasAgendadas.length) {
+      var ag = j.viradasAgendadas[0];
+      if (ag.x === x && ag.y === y) { j.viradasAgendadas.shift(); j.explorador.pedirDirecao(ag.d); }
+      else if (++ag.esperou > 12) j.viradasAgendadas = []; // o caminho mudou: esquece
+    }
 
     if (rastro === j.id) {
       // Pisou no próprio rastro: penalidade suave, sem "morte".
@@ -517,9 +523,11 @@
       var e = j.explorador;
       if (j.tipo === 'humano' && j.local) {
         // Previsão (issue #7): o MEU explorador anda aqui mesmo, célula a célula,
-        // e vira na hora em que eu peço. As regras (rastro, captura, Ops!) seguem
-        // sendo do anfitrião; o estado dele corrige esta previsão se divergir.
-        e.atualizar(dt, jogo.grade, null);
+        // e vira na hora em que eu peço — e o rastro dele aparece na hora também
+        // (preverChegada). As regras (captura, cortes, Ops!) seguem sendo do
+        // anfitrião; o estado dele corrige esta previsão se divergir.
+        var rede = jogo.rede;
+        e.atualizar(dt, jogo.grade, rede.preverChegada ? function (x, y) { return rede.preverChegada(j, x, y); } : null);
       } else {
         // Os outros: seguem em linha reta célula a célula até a próxima mensagem do
         // anfitrião (que chega 6x por segundo) — se divergir, deslizam até a posição certa.

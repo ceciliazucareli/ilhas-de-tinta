@@ -42,6 +42,9 @@ window.IlhasDeTinta = window.IlhasDeTinta || {};
       // uma e outra, então continua suave (issue #5, medido em tests/celular/medir_online.py).
       ENVIOS_POR_SEGUNDO: 6,
       SNAPSHOT_A_CADA: 3,           // segundos entre fotos completas do mapa
+      // Virada que chega atrasada: o anfitrião "rebobina" até esta quantidade de células
+      // para aplicá-la no lugar certo (7 células/s: 6 células ≈ 0,85 s de atraso).
+      REBOBINAR_CELULAS: 6,
       TEMPO_CONEXAO: 8,             // segundos para desistir de conectar
       TEMPO_PROCURAR_SALA: 4,       // segundos esperando o anfitrião aparecer
       TEMPO_TURMA: 20,              // s: entrando na turma, esperando a anfitriã responder

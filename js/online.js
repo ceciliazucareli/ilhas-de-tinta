@@ -171,6 +171,7 @@
       fechada: false,
       // Usados pelo game.js através de jogo.rede:
       direcionar: MetodosRede.direcionar,
+      preverChegada: MetodosRede.preverChegada,
       jogarDeNovo: MetodosRede.jogarDeNovo,
       mudarJogadores: MetodosRede.mudarJogadores,
       pausar: MetodosRede.pausar,
@@ -1110,7 +1111,8 @@
       var e = j.explorador;
       return [e.x, e.y, e.alvoX, e.alvoY, Math.round(e.progresso * 100),
         e.direcao ? DIRS.indexOf(e.direcao) : -1, DIRS.indexOf(e.ultimaDirecao), j.cacando ? 1 : 0,
-        j.ultimaEntrada || 0];  // [8] última virada do jogador já aplicada (previsão, issue #7)
+        j.ultimaEntrada || 0,   // [8] última virada do jogador já aplicada (previsão, issue #7)
+        e.saltos || 0];         // [9] quantas vezes foi teleportado ("Ops!", renascer): o cliente corrige na hora
     });
   }
 
@@ -1153,16 +1155,29 @@
    * há pouco (e seguiu reto), "rebobina" e vira de lá; se ainda vai chegar, vira
    * ao chegar. Assim a virada acontece na célula certa, como no modo offline.
    */
-  var estatViradas = { exatas: 0, rebobinadas: 0, atrasadas: 0, antigoAtrasaria: 0 };
+  var estatViradas = { exatas: 0, rebobinadas: 0, atrasadas: 0, agendadas: 0, antigoAtrasaria: 0 };
   function aplicarViradaRemota(c, j, d, p) {
     var e = j.explorador;
     j.ultimaEntrada = Math.max(j.ultimaEntrada || 0, p.n || 0);
     if (typeof p.x !== 'number') { e.pedirDirecao(d); return; }
+    // Já tem virada esperando a sua célula: esta vem depois dela, na fila.
+    if (j.viradasAgendadas && j.viradasAgendadas.length) {
+      j.viradasAgendadas.push({ x: p.x, y: p.y, d: d, esperou: 0 });
+      estatViradas.agendadas++;
+      return;
+    }
     // No modelo antigo a virada valia "na próxima célula" do anfitrião: atrasaria se ela não for a pedida.
     if (!(e.direcao && e.alvoX === p.x && e.alvoY === p.y) && !(!e.direcao && e.x === p.x && e.y === p.y)) estatViradas.antigoAtrasaria++;
     if (!e.direcao || (e.alvoX === p.x && e.alvoY === p.y)) {
       e.pedirDirecao(d);
       estatViradas.exatas++;
+      return;
+    }
+    // Ele ainda não chegou na célula da virada (a mensagem chegou antes da hora):
+    // guarda a virada para quando chegar lá.
+    if (e.direcao && aFrenteNaLinha(e, p.x, p.y)) {
+      j.viradasAgendadas = [{ x: p.x, y: p.y, d: d, esperou: 0 }];
+      estatViradas.agendadas++;
       return;
     }
     if (rebobinar(j, d, p.x, p.y)) {
@@ -1174,6 +1189,13 @@
   }
   function jogo() { return IT.jogo; }
 
+  /* (x, y) está à frente na linha em que o explorador anda (até 8 células depois do alvo)? */
+  function aFrenteNaLinha(e, x, y) {
+    var v = IT.DIRECOES[e.direcao], dx = x - e.alvoX, dy = y - e.alvoY;
+    if (v.x) return dy === 0 && dx * v.x > 0 && Math.abs(dx) <= 8;
+    return dx === 0 && dy * v.y > 0 && Math.abs(dy) <= 8;
+  }
+
   /*
    * O explorador já passou da célula (x, y) há até 2 células, seguindo reto e só
    * pintando rastro: desfaz esse rastro "a mais", volta para (x, y) e vira de lá.
@@ -1182,7 +1204,7 @@
     var e = j.explorador, g = jogo().grade, hist = j.historico || [];
     var k = -1;
     for (var i = hist.length - 1; i >= 0; i--) if (hist[i].x === x && hist[i].y === y) { k = i; break; }
-    if (k < 0 || hist.length - 1 - k > 2) return false;
+    if (k < 0 || hist.length - 1 - k > O.REBOBINAR_CELULAS) return false;
     // Direção em que ele saiu de (x, y): de hist[k] para a próxima chegada (ou para o alvo atual).
     var prox = hist[k + 1] || { x: e.alvoX, y: e.alvoY };
     var saida = null;
@@ -1269,30 +1291,73 @@
     var e = j.explorador;
     var ack = p[8] || 0, pendente = (c.entradas || 0) > ack;
     if (c.viradaPendente && ack >= c.viradaPendente.n && p[5] === DIRS.indexOf(c.viradaPendente.d)) {
-      medidasVirada.anfitriaoConfirmouMs.push(Date.now() - c.viradaPendente.quando);
+      var ida = Date.now() - c.viradaPendente.quando;
+      medidasVirada.anfitriaoConfirmouMs.push(ida);
+      // Atraso de ida e volta até o anfitrião (média móvel): quanto a previsão pode estar à frente.
+      c.atrasoMs = c.atrasoMs ? c.atrasoMs * 0.75 + ida * 0.25 : ida;
       c.viradaPendente = null;
     }
     var hx = p[0] + (p[2] - p[0]) * p[4] / 100, hy = p[1] + (p[3] - p[1]) * p[4] / 100;
-    var minha = e.posicaoVisual();
-    var dist = Math.abs(minha.x - (e.ajusteX || 0) - hx) + Math.abs(minha.y - (e.ajusteY || 0) - hy);
-    var mesmaDirecao = (p[5] >= 0 ? DIRS[p[5]] : null) === e.direcao;
     j.cacando = !!p[7];
-    if ((pendente && dist <= 2.5) || (!pendente && mesmaDirecao && dist <= 1.5)) {
+    var saltou = p[9] !== undefined && e.saltosVistos !== undefined && p[9] !== e.saltosVistos;
+    if (p[9] !== undefined) e.saltosVistos = p[9];
+    if (!saltou && anfitriaoNoMeuCaminho(e, p, pendente, celulasDeFolga(c, e))) {
       medidasVirada.mantidas++;
-      return true; // a previsão está certa (só um pouco à frente, pelo atraso)
+      return true; // a previsão está certa: o anfitrião só está atrás, pelo atraso da internet
     }
     // Divergiu (Ops!, corte, virada que o anfitrião não aceitou...): vai para a posição dele, deslizando.
     medidasVirada.correcoes++;
+    desfazerPrevistos(c);
     var de = e.posicaoVisual();
     e.x = p[0]; e.y = p[1]; e.alvoX = p[2]; e.alvoY = p[3];
     e.progresso = p[4] / 100;
     e.direcao = p[5] >= 0 ? DIRS[p[5]] : null;
     e.ultimaDirecao = DIRS[p[6]] || e.ultimaDirecao;
     e.proximaDirecao = null;
+    e.caminho = [];
     if (Math.abs(de.x - hx) + Math.abs(de.y - hy) < 4) e.corrigirSuave(de.x, de.y); // teleporte grande: sem deslizar
     // Uma virada minha que o anfitrião ainda não aplicou continua pedida.
     if (pendente && c.viradaPendente) e.pedirDirecao(c.viradaPendente.d);
     return true;
+  }
+
+  /*
+   * O estado do anfitrião (que chega "velho", pelo atraso da internet) bate com
+   * a minha previsão? Bate se a célula onde ele está faz parte do caminho que
+   * eu acabei de fazer, indo para a mesma célula seguinte. (Antes comparávamos
+   * com a posição de AGORA: com ~300 ms de atraso, o anfitrião está 2 células
+   * atrás, ou ainda não chegou na célula da virada, e o explorador era puxado
+   * para trás à toa.) Com uma virada minha que ele ainda não recebeu
+   * (pendente), basta a célula estar no caminho.
+   */
+  /* Quantas células a minha previsão pode estar à frente do anfitrião: atraso × velocidade + folga. */
+  function celulasDeFolga(c, e) {
+    var atraso = Math.max(c.atrasoMs || 400, 250) / 1000;
+    var cps = IT.config.VELOCIDADE * (e.velocidade || 1);
+    return Math.max(4, Math.min(14, Math.ceil(atraso * 1.3 * cps) + 2));
+  }
+
+  function anfitriaoNoMeuCaminho(e, p, pendente, folga) {
+    var parado = p[0] === p[2] && p[1] === p[3];
+    // Os dois parados na mesma célula: igual.
+    if (parado && !e.direcao && p[0] === e.x && p[1] === e.y) return true;
+    var cam = (e.caminho || []).concat([e.x, e.y]);   // células de onde saí + a atual
+    if (e.direcao) cam.push(e.alvoX, e.alvoY);
+    // Só as últimas células que o atraso explica (folga): mais que isso não é atraso,
+    // é divergência — senão o explorador "sai correndo" sozinho.
+    // ("Ops!" e renascer o anfitrião avisa à parte — p[9] — e aí corrige sempre.)
+    var limite = Math.max(0, cam.length - 2 * folga), perto = Infinity;
+    for (var k = cam.length - 2; k >= limite; k -= 2) {
+      perto = Math.min(perto, Math.abs(cam[k] - p[0]) + Math.abs(cam[k + 1] - p[1]));
+      if (cam[k] !== p[0] || cam[k + 1] !== p[1]) continue;
+      if (parado) return true;        // ainda não aplicou o começo de um movimento meu
+      if (k + 2 < cam.length && cam[k + 2] === p[2] && cam[k + 3] === p[3]) return true;
+      if (pendente) return true;
+    }
+    // Virada minha que ele ainda não recebeu: ele passa reto da célula da virada e,
+    // quando a mensagem chegar, "rebobina" até lá (game.js/online.js). Não corrige
+    // enquanto ele estiver a poucas células do meu caminho.
+    return pendente && perto <= Math.min(O.REBOBINAR_CELULAS, folga);
   }
 
   /*
@@ -1327,6 +1392,8 @@
     var jogo = IT.jogo;
     if (jogo.rede !== c || p.r !== c.rodada || (jogo.estado !== 'jogando' && jogo.estado !== 'fim')) return;
     var g = jogo.grade;
+    // Rastro previsto (meu): guarda o que era do anfitrião antes de sobrescrever.
+    var tocadas = foto ? null : {};
     if (foto) {
       for (var i = 0; i < g.total; i++) {
         g.donos[i] = p.d.charCodeAt(i) - 48;
@@ -1336,6 +1403,7 @@
       for (var k = 0; k < p.c.length; k += 3) {
         g.donos[p.c[k]] = p.c[k + 1];
         g.rastros[p.c[k]] = p.c[k + 2];
+        tocadas[p.c[k]] = true;
       }
       // Pulou mensagens? Pede uma foto completa (no máximo a cada 2 s).
       if (c.ultimoSeq >= 0 && p.s > c.ultimoSeq + 1 && Date.now() - c.ultimoPedidoSnap > 2000) {
@@ -1343,6 +1411,7 @@
         enviar(c, 'pedirSnap', { cid: c.cid });
       }
     }
+    conferirPrevistos(c, tocadas);
     c.ultimoSeq = Math.max(c.ultimoSeq, p.s);
     c.ultimaMensagemEm = Date.now();
     if (!foto) mostrarPausaRemota(c, p.pa || 0);
@@ -1397,6 +1466,7 @@
     jogo.aoFim = null;
     c.ultimaMensagemEm = Date.now();
     jogo.jogar(configuracao, { semIA: true });
+    jogo.jogadores.forEach(function (j) { if (j.cid === c.cid) j.explorador.caminho = []; });
     IT.ui.modoEspectador(c.espectador);
     avisoSala('');
     if (!c.vigiando) { c.vigiando = true; vigiarAnfitriao(c); }
@@ -1906,7 +1976,7 @@
     zerarContagem: function () {
       contagem = { enviadas: {}, recebidas: {}, bytesEnviados: 0, bytesRecebidos: 0, desde: Date.now() };
       medidasVirada = { pedidas: 0, mostradaNaHoraMs: [], anfitriaoConfirmouMs: [], correcoes: 0, mantidas: 0 };
-      estatViradas = { exatas: 0, rebobinadas: 0, atrasadas: 0, antigoAtrasaria: 0 };
+      estatViradas = { exatas: 0, rebobinadas: 0, atrasadas: 0, agendadas: 0, antigoAtrasaria: 0 };
     },
     medidasVirada: function () { return { cliente: medidasVirada, anfitriao: estatViradas }; },
     sair: sair
@@ -1922,7 +1992,62 @@
   }
 
   /* Métodos que o game.js chama em jogo.rede (a conexão da sala). */
+  /* ---------- Previsão do MEU rastro (cliente) ---------- */
+
+  /*
+   * Sem isto, o meu explorador (que anda na hora, por previsão) ficava várias
+   * células à frente do próprio rastro — o rastro só aparecia quando o estado do
+   * anfitrião chegava ("o personagem sai correndo"). Agora o rastro é pintado
+   * aqui na hora; o anfitrião confirma (manda a mesma célula) ou desfaz.
+   * c.previstos[índice] = { antes: valor do anfitrião, quando }.
+   */
+  function preverChegada(c, j, x, y) {
+    var g = IT.jogo.grade, k = y * g.colunas + x;
+    if (c.espectador || g.donos[k] === j.id || g.rastros[k] === j.id) return true;
+    c.previstos = c.previstos || {};
+    if (!(k in c.previstos)) c.previstos[k] = { antes: g.rastros[k], quando: Date.now() };
+    g.rastros[k] = j.id;
+    return true;
+  }
+
+  /* Depois de aplicar o que o anfitrião mandou: mantém só o rastro previsto ainda não confirmado. */
+  function conferirPrevistos(c, tocadas) {
+    if (!c.previstos) return;
+    var g = IT.jogo.grade, meu = meuJogador(c), agora = Date.now();
+    if (!meu) { c.previstos = null; return; }
+    var validade = Math.max(c.atrasoMs || 400, 250) * 1.5 + 600;
+    Object.keys(c.previstos).forEach(function (chave) {
+      var k = +chave, pv = c.previstos[k];
+      var doAnfitriao = g.rastros[k];
+      if (tocadas && !tocadas[k] && doAnfitriao === meu.id) doAnfitriao = pv.antes; // ainda é a minha previsão
+      if (doAnfitriao === meu.id || g.donos[k] === meu.id) { delete c.previstos[k]; return; } // confirmado
+      if (doAnfitriao !== 0 || agora - pv.quando > validade) { // o anfitrião discorda, ou demorou demais
+        g.rastros[k] = doAnfitriao;
+        delete c.previstos[k];
+        return;
+      }
+      pv.antes = doAnfitriao;
+      g.rastros[k] = meu.id; // ainda não chegou no anfitrião: continua previsto
+    });
+  }
+
+  /* Previsão errada (correção): o rastro previsto volta a ser o do anfitrião. */
+  function desfazerPrevistos(c) {
+    if (!c.previstos) return;
+    var g = IT.jogo.grade, meu = meuJogador(c);
+    Object.keys(c.previstos).forEach(function (chave) {
+      var k = +chave;
+      if (meu && g.rastros[k] === meu.id) g.rastros[k] = c.previstos[k].antes;
+    });
+    c.previstos = null;
+  }
+
+  function meuJogador(c) {
+    return IT.jogo.jogadores.filter(function (j) { return j.cid === c.cid && j.tipo === 'humano'; })[0];
+  }
+
   var MetodosRede = {
+    preverChegada: function (j, x, y) { return preverChegada(this, j, x, y); },
     direcionar: function (direcao) {
       var c = this;
       var meu = IT.jogo.jogadores.filter(function (j) { return j.cid === c.cid && j.tipo === 'humano'; })[0];

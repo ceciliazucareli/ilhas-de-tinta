@@ -251,11 +251,26 @@ Realtime** (canais **Broadcast** e **Presence**) para repassar mensagens:
   uma tecla (segurar a tecla não repete a mensagem), junto com a **célula onde
   querem virar**.
 - **Sem atraso na virada (previsão):** quem não é o anfitrião vê o próprio
-  explorador virar **na hora**, como no modo offline — o aparelho dele anda com
-  o próprio explorador e o anfitrião aplica a virada **naquela mesma célula**,
-  mesmo que a mensagem chegue um pouco depois (se o explorador acabou de passar
-  dela, ele "volta" e vira de lá). Se a previsão divergir (um "Ops!", um corte),
-  o explorador desliza até a posição certa em vez de pular.
+  explorador andar e virar **na hora**, como no modo offline, e o **rastro**
+  dele aparece na hora também (antes, o rastro só aparecia quando o anfitrião
+  confirmava, e o personagem parecia "sair correndo" na frente dele). O
+  anfitrião aplica a virada **naquela mesma célula**:
+  - se a mensagem chega atrasada, ele "rebobina" até 6 células para virar no
+    lugar certo;
+  - se chega adiantada, guarda a virada até o explorador chegar lá.
+
+  O aparelho confere a previsão com o estado que chega do anfitrião
+  ("atrasado", pelo tempo da internet):
+  - se o anfitrião está em algum ponto do caminho que o explorador acabou de
+    fazer, está certo, e nada muda;
+  - só corrige quando diverge de verdade ("Ops!", corte, virada recusada), e
+    então desliza até a posição certa em vez de pular.
+
+  Medido com `tests/celular/medir_lag.py`, com internet de casa simulada
+  (+80 ms ±60 em cada mensagem) e um celular 4× mais lento, antes → depois:
+  - casa sem rastro embaixo do personagem: 53% → 0%;
+  - puxões para trás: 28 → 2;
+  - correções: 51 → 11.
 - O anfitrião manda **6 mensagens por segundo** com as posições, o relógio e
   só as **células que mudaram**; a cada **3 segundos** manda uma **foto
   completa** do mapa (e também quando alguém perde mensagens).
@@ -526,6 +541,14 @@ rastro (`Grade.capturar(N)` em `js/grid.js`):
   "Voltar para a sala".
 - `tests/celular/teste_convite.py` — o desktop cria a sala e convida; o
   celular abre o link e entra com um toque (e, com o nome lembrado, entra direto).
+- `tests/celular/medir_lag.py [atraso_ms] [variacao_ms] [cpu_lenta]` — mede o
+  "lag" de quem não é o anfitrião numa partida real. Com atraso de rede e
+  celular lento simulados, compara a cada 50 ms onde cada explorador aparece
+  no cliente com onde ele está no anfitrião. Mostra:
+  - os puxões para trás;
+  - as correções;
+  - quanto o personagem fica sem rastro embaixo;
+  - as viradas exatas, rebobinadas, guardadas ou atrasadas no anfitrião.
 - `tests/celular/teste_turma.py` — **turma fixa** com 4 aparelhos (2
   computadores e 2 celulares, Supabase real):
   - quem cria vira o anfitrião;
@@ -617,10 +640,11 @@ IlhasDeTinta.config.TEMPO_LIMITE = 15;    // partida de 15 segundos
   iOS 16.4+). Vários jogadores no mesmo celular não é suportado de forma
   confortável (é pensado para o teclado do computador).
 - **Online — atraso:** a virada de quem não é anfitrião aparece na hora na
-  tela dele (previsão) e acontece na célula certa no anfitrião. Com internet
-  muito lenta (mensagem levando mais que ~0,1 s), o explorador já passou da
-  célula e a virada sai uma célula depois; a previsão então desliza para a
-  posição certa.
+  tela dele (previsão), e o anfitrião a aplica na célula certa até ~0,85 s de
+  atraso (rebobina até 6 células). Com mais atraso, a virada sai depois e a
+  previsão desliza para a posição certa. Os **outros** exploradores aparecem
+  um pouco atrás de onde estão de verdade, pelo tempo da internet. Isso é
+  normal, e eles seguem em linha reta até a próxima mensagem.
 - **Online — confiança:** como o anfitrião simula tudo no navegador dele, quem
   souber mexer no console poderia trapacear. Para um jogo entre amigos e
   família isso é aceitável.

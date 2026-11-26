@@ -84,6 +84,7 @@
 
   /* Teleporta para uma célula e fica parado. */
   Explorador.prototype.teleportar = function (x, y) {
+    this.saltos = (this.saltos || 0) + 1; // online: o cliente percebe "Ops!"/renascer e corrige na hora
     this.x = this.alvoX = x;
     this.y = this.alvoY = y;
     this.progresso = 0;
@@ -135,6 +136,9 @@
     this.progresso += dt * IT.config.VELOCIDADE * this.velocidade;
     while (this.progresso >= 1 && this.direcao) {
       this.progresso -= 1;
+      // Online (cliente): guarda as últimas células de onde saiu, para conferir a
+      // previsão com o anfitrião (online.js, anfitriaoNoMeuCaminho).
+      if (this.caminho) { this.caminho.push(this.x, this.y); if (this.caminho.length > 60) this.caminho.splice(0, 2); }
       this.x = this.alvoX;
       this.y = this.alvoY;
       var continuar = aoChegar ? aoChegar(this.x, this.y) : true;
